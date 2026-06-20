@@ -53,7 +53,7 @@ Fake transcription:
 
 ```bash
 curl -X POST http://localhost:8000/v1/transcribe \
-  -F "file=@sample.webm;type=audio/webm"
+  -F "file=@Stop_message_sample.aac;type=audio/aac"
 ```
 
 Expected: JSON with a static transcript and `"source": "fake"`.
@@ -72,11 +72,13 @@ WHISPER_LANGUAGE=en
 
 Restart the worker. First startup downloads the model (~150 MB for `base`) and loads it onto the GPU.
 
-Transcribe an audio file:
+A sample SCDF stop message recording is included: [`Stop_message_sample.aac`](Stop_message_sample.aac) (AAC, requires ffmpeg).
+
+Transcribe the sample:
 
 ```bash
 curl -X POST http://localhost:8000/v1/transcribe \
-  -F "file=@sample.webm;type=audio/webm"
+  -F "file=@Stop_message_sample.aac;type=audio/aac"
 ```
 
 Expected: JSON with `"source": "whisper"` and a non-empty `transcript`.
@@ -91,6 +93,8 @@ Expected: JSON with `"source": "whisper"` and a non-empty `transcript`.
 | `medium` | ~5 GB | Better accuracy for officer/NPC names |
 
 Use `WHISPER_COMPUTE_TYPE=int8` and `WHISPER_DEVICE=cpu` if CUDA is unavailable.
+
+On **GB10 / ARM64**, the pip `ctranslate2` wheel is usually CPU-only — set `WHISPER_DEVICE=cpu` and `WHISPER_COMPUTE_TYPE=int8`, or rely on the automatic CPU fallback when CUDA fails at startup.
 
 Optional domain hint for better SCDF jargon recognition:
 
@@ -158,10 +162,11 @@ Expected: `"source": "ollama"` with extracted fields.
 Full pipeline (audio → transcript → fields):
 
 ```bash
-TRANSCRIPT=$(curl -s -X POST http://localhost:8000/v1/transcribe -F "file=@sample.webm" | jq -r .transcript)
+TRANSCRIPT=$(curl -s -X POST http://localhost:8000/v1/transcribe \
+  -F "file=@Stop_message_sample.aac;type=audio/aac" | jq -r .transcript)
 curl -X POST http://localhost:8000/v1/extract \
   -H "Content-Type: application/json" \
-  -d "{\"text\": \"$TRANSCRIPT\", \"type\": \"stop_message\"}"
+  -d "{\"text\": \"$TRANSCRIPT\", \"type\": \"stop_message\", \"incident_type_name\": \"False Alarm Malfunction\"}"
 ```
 
 If Whisper CUDA fails on GB10 ARM, fallback:
