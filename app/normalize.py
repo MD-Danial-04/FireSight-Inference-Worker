@@ -65,6 +65,14 @@ _CALL_SIGN_PATTERN = re.compile(
 )
 _NPC_PATTERN = re.compile(r"\b([\w-]+\s+NPC)\b", re.IGNORECASE)
 _TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+")
+_LIAISE_MISHEAR_PATTERN = re.compile(
+    r"\b(liars?|lease|lies|lyase|liaise?)\s+(with\b)",
+    re.IGNORECASE,
+)
+_LIAISE_CLAUSE_PATTERN = re.compile(
+    r"\bLiase with\b(.+?)(?=\.\s+Case\b|\.\s*$)",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def _hint_call_sign(text: str) -> str:
@@ -74,6 +82,49 @@ def _hint_call_sign(text: str) -> str:
     if match.group(1):
         return f"LF{match.group(1)}"
     return f"LF8{match.group(2)}"
+
+
+def _normalize_call_sign(current: str, source_text: str) -> str:
+    for text in (current, source_text):
+        hinted = _hint_call_sign(text)
+        if hinted:
+            return hinted
+    return current.strip()
+
+
+def _normalize_location(location: str) -> str:
+    if not location.strip():
+        return location
+    result = re.sub(r"\bGall\b", "Gul", location, flags=re.IGNORECASE)
+    result = re.sub(r"\bAvenue\b", "Ave", result, flags=re.IGNORECASE)
+    return result.strip()
+
+
+def _normalize_liaise_text(text: str) -> str:
+    return _LIAISE_MISHEAR_PATTERN.sub(r"Liase \2", text)
+
+
+def _extract_liaise_clause(text: str) -> str:
+    normalized = _normalize_liaise_text(text)
+    match = _LIAISE_CLAUSE_PATTERN.search(normalized)
+    if not match:
+        return ""
+    detail = match.group(1).strip().rstrip(",")
+    return f"Liase with {detail}"
+
+
+def _normalize_events_circumstances(current: str, source_text: str) -> str:
+    current = _normalize_liaise_text(current)
+    liaise = _extract_liaise_clause(source_text)
+    if not liaise:
+        return current.strip()
+
+    if re.search(r"\bliase with\b", current, re.IGNORECASE):
+        return current.strip()
+
+    if current.strip():
+        return f"{current.strip().rstrip('.')}. {liaise}"
+    return liaise
 
 
 def _normalize_ranks(text: str) -> str:
@@ -102,6 +153,8 @@ def _decode_nato_service_id(text: str) -> str:
     current = ""
 
     for token in tokens:
+        if token.lower() == "or":
+            continue
         char = _token_to_nato_char(token)
         if char is not None:
             current += char
@@ -182,12 +235,18 @@ def _hint_handover_npc(text: str) -> str:
 
 
 def apply_field_normalization(fields: dict[str, str], source_text: str) -> dict[str, str]:
+    source_text = _normalize_liaise_text(source_text)
     result = dict(fields)
 
-    if not result.get("applianceCallSign"):
-        hinted = _hint_call_sign(source_text)
-        if hinted:
-            result["applianceCallSign"] = hinted
+    result["applianceCallSign"] = _normalize_call_sign(
+        result.get("applianceCallSign", ""),
+        source_text,
+    )
+    result["locationOfFire"] = _normalize_location(result.get("locationOfFire", ""))
+    result["eventsCircumstances"] = _normalize_events_circumstances(
+        result.get("eventsCircumstances", ""),
+        source_text,
+    )
 
     result["handoverOfficer"] = _normalize_handover_officer(
         result.get("handoverOfficer", ""),

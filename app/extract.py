@@ -55,10 +55,11 @@ SCDF extraction rules:
 - areaOfFireOrigin: Free text from the message — e.g. Zone 7, living room, kitchen. Do NOT assume zone; extract what is actually said.
 - handoverOfficer: Rank abbreviation, name, and service ID. Use SCDF rank forms such as SGT3 (not S3) and SSS for triple S. Decode NATO-spoken IDs to compact alphanumeric (e.g. Tango 1, 9-0-3-5-0 becomes T190350).
 - handoverNpc: NPC name (e.g. Nanyang NPC).
+- eventsCircumstances: Investigation findings plus any liase line. Stop messages always include liase with a person or role (e.g. Liase with Mr. Zaini, safety officer). Fix ASR mishears such as Liars or Lease to Liase.
 - classification: Prefer incident_type_name from the user message when provided.
 
 Example input:
-LF812 stop for location at 7 Gul Ave. Case classified as False alarm malfunction of manual call point, at zone 7. Upon investigation no smoke no fire. Case handed over to Sergeant 3 Alsyraf, Tango 1, 9-0-3-5-0 from Nanyang NPC.
+LF812 stop for location at 7 Gul Ave. Case classified as False alarm malfunction of manual call point, at zone 7. Upon investigation no smoke no fire. Liase with Mr. Zaini, safety officer. Case handed over to Sergeant 3 Alsyraf, Tango 1, 9-0-3-5-0 from Nanyang NPC.
 
 Example output fields:
 {
@@ -70,7 +71,7 @@ Example output fields:
   "probableCause": "False alarm malfunction of manual call point",
   "ignitionSource": "",
   "ignitionFuel": "",
-  "eventsCircumstances": "No smoke no fire",
+  "eventsCircumstances": "No smoke no fire. Liase with Mr. Zaini, safety officer",
   "areaOfFireOrigin": "Zone 7",
   "classification": "False alarm malfunction",
   "handoverOfficer": "SGT3 Alsyraf T190350",

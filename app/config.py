@@ -31,7 +31,8 @@ class Settings(BaseSettings):
     whisper_language: str = "en"
     whisper_initial_prompt: str = (
         "SCDF stop message. LF812 stop for location at 7 Gul Ave. "
-        "False alarm malfunction. Zone 7. Handover to SGT3 Alsyraf T190350. Nanyang NPC."
+        "False alarm malfunction. Zone 7. Liase with Mr. Zaini, safety officer. "
+        "Handover to SGT3 Alsyraf T190350. Nanyang NPC."
     )
     whisper_vad_filter: bool = False
     whisper_beam_size: int = 5
