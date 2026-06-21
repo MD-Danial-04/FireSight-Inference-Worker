@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 
 from app.config import settings
-from app.extract import EXTRACTABLE_FIELDS
+from app.extract import EXTRACTABLE_FIELDS, _parse_llm_json
 from app.main import app
 
 client = TestClient(app)
@@ -50,6 +50,16 @@ LLM_JSON_RESPONSE = """
 }
 ```
 """
+
+LLM_JSON_WITH_PREAMBLE = (
+    "Here is the extracted data in JSON format:\n\n" + LLM_JSON_RESPONSE
+)
+
+
+def test_parse_llm_json_handles_preamble_and_fences():
+    parsed = _parse_llm_json(LLM_JSON_WITH_PREAMBLE)
+    assert parsed["fields"]["applianceCallSign"] == "LF812"
+    assert parsed["fields"]["locationOfFire"] == "7 Gul Ave"
 
 
 def test_health_returns_ok():
@@ -99,6 +109,33 @@ def test_transcribe_returns_fake_transcript():
     assert data["source"] == "fake"
     assert data["transcript"]
     assert data["confidence"] == 0.95
+
+
+def test_extract_llm_parses_preamble_wrapped_json():
+    mock_response = MagicMock()
+    mock_response.json.return_value = {
+        "choices": [{"message": {"content": LLM_JSON_WITH_PREAMBLE}}],
+    }
+    mock_response.raise_for_status = MagicMock()
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+
+    with (
+        patch.object(settings, "use_fake_extraction", False),
+        patch("app.extract.httpx.AsyncClient", return_value=mock_client),
+    ):
+        response = client.post(
+            "/v1/extract",
+            json={"text": FAM_STOP_MESSAGE, "type": "stop_message"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["source"] == "ollama"
+    assert data["fields"]["applianceCallSign"] == "LF812"
 
 
 def test_extract_llm_parses_fenced_json():

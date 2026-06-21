@@ -50,15 +50,70 @@ Use empty string when unknown. Confidence is 0.0 to 1.0.
 """.strip()
 
 
-def _parse_llm_json(content: str) -> dict:
+def _extract_json_text(content: str) -> str:
     text = content.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
-        text = re.sub(r"\s*```$", "", text)
-    parsed = json.loads(text)
-    if not isinstance(parsed, dict) or "fields" not in parsed:
-        raise ValueError("missing fields key")
-    return parsed
+
+    fence_match = re.search(
+        r"```(?:json)?\s*(.*?)\s*```",
+        text,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    if fence_match:
+        return fence_match.group(1).strip()
+
+    start = text.find("{")
+    if start == -1:
+        return text
+
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        char = text[i]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+
+    return text[start:]
+
+
+def _parse_llm_json(content: str) -> dict:
+    candidates: list[str] = []
+    stripped = content.strip()
+    if stripped:
+        candidates.append(stripped)
+    extracted = _extract_json_text(content)
+    if extracted and extracted not in candidates:
+        candidates.append(extracted)
+
+    last_error: json.JSONDecodeError | ValueError | None = None
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            last_error = exc
+            continue
+        if not isinstance(parsed, dict) or "fields" not in parsed:
+            last_error = ValueError("missing fields key")
+            continue
+        return parsed
+
+    if last_error is not None:
+        raise last_error
+    raise ValueError("missing fields key")
 
 
 def fake_extract(req: ExtractRequest) -> ExtractResponse:
