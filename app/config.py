@@ -38,5 +38,10 @@ class Settings(BaseSettings):
     whisper_beam_size: int = 5
     whisper_condition_on_previous_text: bool = False
 
+    coordinator_base_url: str = "http://localhost:8080"
+    coordinator_worker_api_key: str = "dev-worker-key"
+    worker_poll_interval_sec: float = 2.0
+    worker_enabled: bool = False
+
 
 settings = Settings()

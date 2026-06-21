@@ -1,13 +1,16 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.coordinator_client import get_coordinator_client
 from app.config import settings
 from app.extract import extract_fields
 from app.schemas import ExtractRequest, ExtractResponse, HealthResponse, TranscribeResponse
 from app.transcribe import load_whisper_model, transcribe_audio
+from app.worker_loop import run_worker_loop
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +21,24 @@ async def lifespan(app: FastAPI):
         app.state.whisper_model = None
     else:
         app.state.whisper_model = load_whisper_model()
+
+    worker_task: asyncio.Task | None = None
+    stop_event = asyncio.Event()
+    if settings.worker_enabled:
+        coordinator = get_coordinator_client()
+        worker_task = asyncio.create_task(
+            run_worker_loop(coordinator, app.state.whisper_model, stop_event=stop_event)
+        )
+
     yield
+
+    if worker_task is not None:
+        stop_event.set()
+        worker_task.cancel()
+        try:
+            await worker_task
+        except asyncio.CancelledError:
+            pass
     app.state.whisper_model = None
 
 
