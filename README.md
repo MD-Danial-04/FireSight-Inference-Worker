@@ -14,7 +14,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-For real transcription, install **ffmpeg** on the host (required for audio decoding):
+For real transcription, install **ffmpeg** on the host if you need to convert non-WAV audio locally (the worker accepts uploaded WAV directly).
 
 ```bash
 # Arch Linux
@@ -41,19 +41,19 @@ Fake extraction:
 curl -X POST http://localhost:8000/v1/extract \
   -H "Content-Type: application/json" \
   -d '{
-    "text": "LF812 stop for location at 7 Gul Ave. Case classified as False alarm malfunction of manual Call point, at zone 7. Upon investigation No smoke no fire. Case handed over to S3 alsyraf waT190350 from Nanyang NPC",
+    "text": "LF812 stop for location at 7 Gul Ave. Case classified as False alarm malfunction of manual Call point, at zone 7. Upon investigation No smoke no fire. Case handed over to SGT3 Alsyraf T190350 from Nanyang NPC",
     "type": "stop_message",
     "incident_type_name": "False Alarm Malfunction"
   }'
 ```
 
-Expected: JSON with `fields`, `confidence`, and `"source": "fake"`.
+Expected: JSON with `fields`, `confidence`, and `"source": "fake"`. Officer ranks use SCDF abbreviations (e.g. `SGT3`, `SSS`).
 
 Fake transcription:
 
 ```bash
 curl -X POST http://localhost:8000/v1/transcribe \
-  -F "file=@Stop_message_sample.aac;type=audio/aac"
+  -F "file=@Stop_message_sample.wav;type=audio/wav"
 ```
 
 Expected: JSON with a static transcript and `"source": "fake"`.
@@ -68,17 +68,20 @@ WHISPER_MODEL=base
 WHISPER_DEVICE=cuda
 WHISPER_COMPUTE_TYPE=float16
 WHISPER_LANGUAGE=en
+WHISPER_VAD_FILTER=false
+WHISPER_BEAM_SIZE=5
+WHISPER_CONDITION_ON_PREVIOUS_TEXT=false
 ```
 
 Restart the worker. First startup downloads the model (~150 MB for `base`) and loads it onto the GPU.
 
-A sample SCDF stop message recording is included: [`Stop_message_sample.aac`](Stop_message_sample.aac) (AAC, requires ffmpeg).
+A sample SCDF stop message recording is included: [`Stop_message_sample.wav`](Stop_message_sample.wav).
 
 Transcribe the sample:
 
 ```bash
 curl -X POST http://localhost:8000/v1/transcribe \
-  -F "file=@Stop_message_sample.aac;type=audio/aac"
+  -F "file=@Stop_message_sample.wav;type=audio/wav"
 ```
 
 Expected: JSON with `"source": "whisper"` and a non-empty `transcript`.
@@ -94,17 +97,24 @@ Expected: JSON with `"source": "whisper"` and a non-empty `transcript`.
 
 Use `WHISPER_COMPUTE_TYPE=int8` and `WHISPER_DEVICE=cpu` if CUDA is unavailable.
 
-On **GB10 / ARM64**, the pip `ctranslate2` wheel is usually CPU-only — set `WHISPER_DEVICE=cpu` and `WHISPER_COMPUTE_TYPE=int8`, or rely on the automatic CPU fallback when CUDA fails at startup.
+On **GB10 / ARM64**, build CTranslate2 from source for CUDA, or rely on automatic CPU fallback when CUDA fails at startup.
 
 Optional domain hint for better SCDF jargon recognition:
 
 ```text
-WHISPER_INITIAL_PROMPT=SCDF fire incident stop message. Appliance call sign, location, zone, classification, handover officer, NPC.
+WHISPER_INITIAL_PROMPT=SCDF stop message. LF812 stop for location at 7 Gul Ave. False alarm malfunction. Zone 7. Handover to SGT3 Alsyraf T190350. Nanyang NPC.
 ```
 
 ## Phase 3 — Ollama field extraction (work PC)
 
 Real extraction uses **Ollama** (`llama3.1:8b`) via an OpenAI-compatible API. No Docker required — run natively on the work PC (ARM64 GB10: build and run on that machine, not cross-build from x86).
+
+Post-processing normalizes:
+
+- **Call signs** — `LF-A12` → `LF812` when the LLM leaves the field empty
+- **Ranks** — `Sergeant 3` → `SGT3`, `triple S` → `SSS`
+- **Service IDs** — NATO phonetics (`Tango 1, 9-0-3-5-0`) → `T190350`
+- **areaOfFireOrigin** — free text only (zone, living room, etc.); no forced zone pattern
 
 ### Terminal 1 — start Ollama
 
@@ -134,7 +144,10 @@ LLM_API_KEY=ollama
 WHISPER_MODEL=small
 WHISPER_DEVICE=cuda
 WHISPER_COMPUTE_TYPE=float16
-WHISPER_INITIAL_PROMPT=SCDF fire incident stop message. Appliance call sign, location, zone, classification, handover officer, NPC.
+WHISPER_INITIAL_PROMPT=SCDF stop message. LF812 stop for location at 7 Gul Ave. False alarm malfunction. Zone 7. Handover to SGT3 Alsyraf T190350. Nanyang NPC.
+WHISPER_VAD_FILTER=false
+WHISPER_BEAM_SIZE=5
+WHISPER_CONDITION_ON_PREVIOUS_TEXT=false
 ```
 
 Start the worker:
@@ -163,10 +176,10 @@ Full pipeline (audio → transcript → fields):
 
 ```bash
 TRANSCRIPT=$(curl -s -X POST http://localhost:8000/v1/transcribe \
-  -F "file=@Stop_message_sample.aac;type=audio/aac" | jq -r .transcript)
+  -F "file=@Stop_message_sample.wav;type=audio/wav" | jq -r .transcript)
 curl -X POST http://localhost:8000/v1/extract \
   -H "Content-Type: application/json" \
-  -d "{\"text\": \"$TRANSCRIPT\", \"type\": \"stop_message\", \"incident_type_name\": \"False Alarm Malfunction\"}"
+  -d "$(jq -n --arg t "$TRANSCRIPT" '{text: $t, type: "stop_message", incident_type_name: "False Alarm Malfunction"}')"
 ```
 
 If Whisper CUDA fails on GB10 ARM, fallback:

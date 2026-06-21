@@ -11,7 +11,7 @@ client = TestClient(app)
 FAM_STOP_MESSAGE = (
     "LF812 stop for location at 7 Gul Ave. Case classified as False alarm malfunction "
     "of manual Call point, at zone 7. Upon investigation No smoke no fire. "
-    "Case handed over to S3 alsyraf waT190350 from Nanyang NPC"
+    "Case handed over to SGT3 alsyraf waT190350 from Nanyang NPC"
 )
 
 LLM_JSON_RESPONSE = """
@@ -29,7 +29,7 @@ LLM_JSON_RESPONSE = """
     "eventsCircumstances": "No smoke no fire",
     "areaOfFireOrigin": "Zone 7",
     "classification": "False alarm malfunction",
-    "handoverOfficer": "S3 Alsyraf T190350",
+    "handoverOfficer": "SGT3 Alsyraf T190350",
     "handoverNpc": "Nanyang NPC"
   },
   "confidence": {

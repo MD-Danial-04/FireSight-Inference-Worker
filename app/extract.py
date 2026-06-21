@@ -5,6 +5,7 @@ import httpx
 from fastapi import HTTPException
 
 from app.config import settings
+from app.normalize import apply_field_normalization
 from app.schemas import ExtractRequest, ExtractResponse, ExtractableField
 
 EXTRACTABLE_FIELDS: list[ExtractableField] = [
@@ -47,6 +48,34 @@ Return ONLY valid JSON with this shape:
   }
 }
 Use empty string when unknown. Confidence is 0.0 to 1.0.
+
+SCDF extraction rules:
+- applianceCallSign: LF plus 3 digits (e.g. LF812). Normalize ASR errors such as LF-A12 or LF A 12 to LF812.
+- locationOfFire: Address as stated; fix common mishears (Gall to Gul, Avenue to Ave).
+- areaOfFireOrigin: Free text from the message — e.g. Zone 7, living room, kitchen. Do NOT assume zone; extract what is actually said.
+- handoverOfficer: Rank abbreviation, name, and service ID. Use SCDF rank forms such as SGT3 (not S3) and SSS for triple S. Decode NATO-spoken IDs to compact alphanumeric (e.g. Tango 1, 9-0-3-5-0 becomes T190350).
+- handoverNpc: NPC name (e.g. Nanyang NPC).
+- classification: Prefer incident_type_name from the user message when provided.
+
+Example input:
+LF812 stop for location at 7 Gul Ave. Case classified as False alarm malfunction of manual call point, at zone 7. Upon investigation no smoke no fire. Case handed over to Sergeant 3 Alsyraf, Tango 1, 9-0-3-5-0 from Nanyang NPC.
+
+Example output fields:
+{
+  "applianceCallSign": "LF812",
+  "locationOfFire": "7 Gul Ave",
+  "fireInvolved": "False alarm malfunction",
+  "methodOfExtinguishment": "",
+  "damagesSustained": "",
+  "probableCause": "False alarm malfunction of manual call point",
+  "ignitionSource": "",
+  "ignitionFuel": "",
+  "eventsCircumstances": "No smoke no fire",
+  "areaOfFireOrigin": "Zone 7",
+  "classification": "False alarm malfunction",
+  "handoverOfficer": "SGT3 Alsyraf T190350",
+  "handoverNpc": "Nanyang NPC"
+}
 """.strip()
 
 
@@ -130,7 +159,7 @@ def fake_extract(req: ExtractRequest) -> ExtractResponse:
             "eventsCircumstances": req.text.strip(),
             "areaOfFireOrigin": "Zone 7",
             "classification": "False alarm malfunction",
-            "handoverOfficer": "S3 Alsyraf T190350",
+            "handoverOfficer": "SGT3 Alsyraf T190350",
             "handoverNpc": "Nanyang NPC",
         },
         confidence={
@@ -156,7 +185,7 @@ Text:
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
-        "temperature": 0.1,
+        "temperature": 0,
         "max_tokens": 1024,
         "format": "json",
     }
@@ -195,6 +224,7 @@ Text:
         ) from exc
 
     fields = {key: str(parsed["fields"].get(key, "")).strip() for key in EXTRACTABLE_FIELDS}
+    fields = apply_field_normalization(fields, req.text)
     confidence_raw = parsed.get("confidence", {})
     confidence = {
         key: float(confidence_raw.get(key, 0.0))

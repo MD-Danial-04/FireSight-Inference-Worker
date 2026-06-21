@@ -51,7 +51,12 @@ def load_whisper_model() -> "WhisperModel":
 
 
 def _transcribe_file(model: "WhisperModel", audio_path: str) -> TranscribeResponse:
-    transcribe_kwargs: dict = {"language": settings.whisper_language}
+    transcribe_kwargs: dict = {
+        "language": settings.whisper_language,
+        "vad_filter": settings.whisper_vad_filter,
+        "beam_size": settings.whisper_beam_size,
+        "condition_on_previous_text": settings.whisper_condition_on_previous_text,
+    }
     if settings.whisper_initial_prompt:
         transcribe_kwargs["initial_prompt"] = settings.whisper_initial_prompt
 
