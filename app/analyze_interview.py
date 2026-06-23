@@ -9,6 +9,7 @@ from app.schemas import (
     AnalyzeInterviewRequest,
     AnalyzeInterviewResponse,
     FollowUpSuggestion,
+    InterviewLanguage,
     QuestionCoverage,
     QuestionCoverageStatus,
 )
@@ -28,7 +29,8 @@ Return ONLY valid JSON with this shape:
   "follow_ups": [
     {
       "related_question_id": "question-id-or-null",
-      "prompt": "short officer-ready follow-up question",
+      "prompt": "short follow-up question in English for the report",
+      "prompt_conduct": "same follow-up in the conduct language for asking aloud",
       "reason": "why this follow-up is needed"
     }
   ]
@@ -44,6 +46,7 @@ Include one coverage entry per input question (same id). Confidence is 0.0 to 1.
 
 Generate follow_up prompts for partial, unanswered, and unclear items only.
 Follow-ups should be short, direct questions an investigator can ask next.
+prompt must be English. prompt_conduct must be in the conduct language provided by the user (same as prompt when English).
 Do not invent coverage for questions not in the input list.
 """.strip()
 
@@ -128,6 +131,13 @@ def _normalize_status(raw: str) -> QuestionCoverageStatus:
     return "unanswered"
 
 
+def _conduct_prompt(english: str, interview_language: InterviewLanguage) -> str:
+    if interview_language == "en":
+        return english
+    prefix = {"ms": "[MS]", "ta": "[TA]", "zh": "[ZH]"}[interview_language]
+    return f"{prefix} {english}"
+
+
 def fake_analyze_interview(req: AnalyzeInterviewRequest) -> AnalyzeInterviewResponse:
     coverage: list[QuestionCoverage] = []
     follow_ups: list[FollowUpSuggestion] = []
@@ -157,10 +167,12 @@ def fake_analyze_interview(req: AnalyzeInterviewRequest) -> AnalyzeInterviewResp
         )
 
         if status in {"partial", "unanswered", "unclear"}:
+            english_prompt = f"Could you clarify: {question.prompt}"
             follow_ups.append(
                 FollowUpSuggestion(
                     related_question_id=question.id,
-                    prompt=f"Could you clarify: {question.prompt}",
+                    prompt=english_prompt,
+                    prompt_conduct=_conduct_prompt(english_prompt, req.interview_language),
                     reason=f"Question marked as {status}",
                 )
             )
@@ -178,12 +190,19 @@ async def llm_analyze_interview(req: AnalyzeInterviewRequest) -> AnalyzeIntervie
         for q in req.questions
     ]
 
+    conduct_language_note = ""
+    if req.interview_language != "en":
+        conduct_language_note = (
+            f"\nConduct language: {req.interview_language} "
+            "(follow-up prompt_conduct must be in this language; prompt must be English)."
+        )
+
     user_prompt = f"""
 Transcript:
 {req.transcript}
 
 Leading questions checklist:
-{json.dumps(questions_payload, indent=2)}
+{json.dumps(questions_payload, indent=2)}{conduct_language_note}
 """.strip()
 
     payload = {
@@ -261,6 +280,9 @@ Leading questions checklist:
         prompt = str(item.get("prompt", "")).strip()
         if not prompt:
             continue
+        prompt_conduct = str(item.get("prompt_conduct", "")).strip() or _conduct_prompt(
+            prompt, req.interview_language
+        )
         related = item.get("related_question_id")
         related_id = str(related).strip() if related else None
         if related_id and related_id not in question_ids:
@@ -269,6 +291,7 @@ Leading questions checklist:
             FollowUpSuggestion(
                 related_question_id=related_id,
                 prompt=prompt,
+                prompt_conduct=prompt_conduct,
                 reason=str(item.get("reason", "")).strip(),
             )
         )

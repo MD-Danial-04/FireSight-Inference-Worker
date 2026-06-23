@@ -78,6 +78,15 @@ class CoordinatorClient:
             )
             response.raise_for_status()
 
+    async def complete_question_translation(self, job_id: UUID, *, result: dict) -> None:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{self._base}/v1/worker/jobs/{job_id}/complete-question-translation",
+                headers=self._headers,
+                json={"result": result},
+            )
+            response.raise_for_status()
+
     async def download_image(self, job_id: UUID) -> tuple[bytes, str]:
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.get(

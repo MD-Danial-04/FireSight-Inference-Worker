@@ -52,6 +52,7 @@ LLM_ANALYSIS_RESPONSE = """
     {
       "related_question_id": "charging-location",
       "prompt": "Was the device on charge or in use at the time of the incident?",
+      "prompt_conduct": "[MS] Was the device on charge or in use at the time of the incident?",
       "reason": "Location mentioned but charging context needs clarification"
     }
   ]
@@ -113,6 +114,24 @@ def test_analyze_interview_llm_parses_json():
     assert data["coverage"][0]["id"] == "device-type"
     assert len(data["follow_ups"]) == 1
     assert data["follow_ups"][0]["related_question_id"] == "charging-location"
+    assert data["follow_ups"][0]["prompt_conduct"]
+
+
+def test_analyze_interview_fake_includes_prompt_conduct_for_non_english():
+    response = client.post(
+        "/v1/analyze-interview",
+        json={
+            "transcript": SAMPLE_TRANSCRIPT,
+            "questions": SAMPLE_QUESTIONS,
+            "interview_language": "ms",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert any(
+        follow_up["prompt_conduct"].startswith("[MS]")
+        for follow_up in data["follow_ups"]
+    )
 
 
 def test_analyze_interview_llm_invalid_json_returns_502():

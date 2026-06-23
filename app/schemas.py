@@ -68,11 +68,37 @@ class InterviewQuestion(BaseModel):
     id: str = Field(..., min_length=1)
     prompt: str = Field(..., min_length=1)
     hint: str | None = None
+    section: str | None = None
 
 
 class AnalyzeInterviewRequest(BaseModel):
     transcript: str = Field(..., min_length=1)
     questions: list[InterviewQuestion] = Field(..., min_length=1)
+    interview_language: InterviewLanguage = "en"
+
+
+class TranslateInterviewQuestionInput(BaseModel):
+    id: str = Field(..., min_length=1)
+    prompt: str = Field(..., min_length=1)
+    hint: str | None = None
+    section: str | None = None
+
+
+class TranslateQuestionsRequest(BaseModel):
+    questions: list[TranslateInterviewQuestionInput] = Field(..., min_length=1)
+    interview_language: InterviewLanguage
+
+
+class TranslatedInterviewQuestion(BaseModel):
+    id: str
+    prompt_conduct: str
+    hint_conduct: str | None = None
+    section_conduct: str | None = None
+
+
+class QuestionTranslationResult(BaseModel):
+    questions: list[TranslatedInterviewQuestion]
+    source: Literal["fake", "ollama", "nim"] = "fake"
 
 
 class QuestionCoverage(BaseModel):
@@ -85,6 +111,7 @@ class QuestionCoverage(BaseModel):
 class FollowUpSuggestion(BaseModel):
     related_question_id: str | None = None
     prompt: str
+    prompt_conduct: str
     reason: str
 
 

@@ -14,9 +14,10 @@ from app.schemas import (
     InterviewLanguage,
     InterviewQuestion,
     TranscribeResponse,
+    TranslateInterviewQuestionInput,
 )
 from app.transcribe import transcribe_audio
-from app.translate import translate_interview_transcript
+from app.translate import translate_interview_questions, translate_interview_transcript
 
 logger = logging.getLogger(__name__)
 
@@ -52,15 +53,33 @@ async def run_worker_loop(
                     questions = [
                         InterviewQuestion.model_validate(q) for q in questions_raw
                     ]
+                    interview_language: InterviewLanguage = claim.get("interview_language") or "en"
                     analysis_response = await analyze_interview_coverage(
                         AnalyzeInterviewRequest(
                             transcript=transcript_text,
                             questions=questions,
+                            interview_language=interview_language,
                         )
                     )
                     await coordinator.complete_analysis(
                         job_id,
                         result=analysis_response.model_dump(mode="json"),
+                    )
+                elif phase == "translate_questions":
+                    questions_raw = claim.get("analysis_questions") or []
+                    interview_language: InterviewLanguage = claim.get("interview_language") or "en"
+                    if not questions_raw:
+                        raise RuntimeError("Translate questions claim missing questions")
+                    questions = [
+                        TranslateInterviewQuestionInput.model_validate(q) for q in questions_raw
+                    ]
+                    translation_response = await translate_interview_questions(
+                        questions,
+                        interview_language,
+                    )
+                    await coordinator.complete_question_translation(
+                        job_id,
+                        result=translation_response.model_dump(mode="json"),
                     )
                 elif phase == "analyze_photo":
                     image_bytes, _filename = await coordinator.download_image(job_id)

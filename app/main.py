@@ -19,9 +19,12 @@ from app.schemas import (
     ExtractResponse,
     HealthResponse,
     InterviewLanguage,
+    QuestionTranslationResult,
     TranscribeResponse,
+    TranslateQuestionsRequest,
 )
 from app.transcribe import load_whisper_model
+from app.translate import translate_interview_questions
 from app.worker_loop import _transcribe, run_worker_loop
 
 logger = logging.getLogger(__name__)
@@ -87,6 +90,13 @@ async def extract(req: ExtractRequest) -> ExtractResponse:
 @app.post("/v1/analyze-interview", response_model=AnalyzeInterviewResponse)
 async def analyze_interview(req: AnalyzeInterviewRequest) -> AnalyzeInterviewResponse:
     return await analyze_interview_coverage(req)
+
+
+@app.post("/v1/translate-interview-questions", response_model=QuestionTranslationResult)
+async def translate_interview_questions_endpoint(
+    req: TranslateQuestionsRequest,
+) -> QuestionTranslationResult:
+    return await translate_interview_questions(req.questions, req.interview_language)
 
 
 @app.post("/v1/analyze-photo", response_model=AnalyzePhotoResponse)
