@@ -104,12 +104,16 @@ def test_transcribe_returns_fake_transcript():
     response = client.post(
         "/v1/transcribe",
         files={"file": ("sample.webm", b"fake-audio-bytes", "audio/webm")},
+        data={"interview_language": "ms"},
     )
     assert response.status_code == 200
     data = response.json()
     assert data["source"] == "fake"
-    assert data["transcript"]
+    assert data["transcript_original"]
+    assert data["transcript_english"]
+    assert data["interview_language"] == "ms"
     assert data["confidence"] == 0.95
+    assert data["transcript_english"].startswith("[EN] ")
 
 
 def test_extract_llm_parses_preamble_wrapped_json():

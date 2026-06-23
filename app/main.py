@@ -2,7 +2,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.analyze_interview import analyze_interview_coverage
@@ -18,10 +18,11 @@ from app.schemas import (
     ExtractRequest,
     ExtractResponse,
     HealthResponse,
+    InterviewLanguage,
     TranscribeResponse,
 )
-from app.transcribe import load_whisper_model, transcribe_audio
-from app.worker_loop import run_worker_loop
+from app.transcribe import load_whisper_model
+from app.worker_loop import _transcribe, run_worker_loop
 
 logger = logging.getLogger(__name__)
 
@@ -110,17 +111,15 @@ async def analyze_photo_endpoint(
 
 
 @app.post("/v1/transcribe", response_model=TranscribeResponse)
-async def transcribe(file: UploadFile = File(...)) -> TranscribeResponse:
-    if settings.use_fake_transcription:
-        return TranscribeResponse(
-            transcript="LF812 stop for location at 7 Gul Ave. Case classified as false alarm malfunction.",
-            confidence=0.95,
-            source="fake",
-        )
-
-    model = app.state.whisper_model
-    if model is None:
-        raise HTTPException(status_code=503, detail="Whisper model not loaded")
-
+async def transcribe(
+    file: UploadFile = File(...),
+    interview_language: InterviewLanguage = Form("en"),
+) -> TranscribeResponse:
     audio_bytes = await file.read()
-    return await transcribe_audio(model, audio_bytes, file.filename)
+    whisper_model = getattr(app.state, "whisper_model", None)
+    return await _transcribe(
+        whisper_model,
+        audio_bytes,
+        file.filename or "audio.webm",
+        interview_language=interview_language,
+    )

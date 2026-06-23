@@ -36,12 +36,27 @@ class CoordinatorClient:
                 filename = content_disposition.split("filename=", 1)[1].strip('"')
             return response.content, filename
 
-    async def complete_transcription(self, job_id: UUID, *, transcript: str) -> None:
+    async def complete_transcription(
+        self,
+        job_id: UUID,
+        *,
+        transcript: str,
+        transcript_original: str | None = None,
+        transcript_english: str | None = None,
+        interview_language: str | None = None,
+    ) -> None:
+        payload: dict = {"transcript": transcript}
+        if transcript_original is not None:
+            payload["transcript_original"] = transcript_original
+        if transcript_english is not None:
+            payload["transcript_english"] = transcript_english
+        if interview_language is not None:
+            payload["interview_language"] = interview_language
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 f"{self._base}/v1/worker/jobs/{job_id}/transcribe",
                 headers=self._headers,
-                json={"transcript": transcript},
+                json=payload,
             )
             response.raise_for_status()
 

@@ -11,10 +11,12 @@ from app.schemas import (
     AnalyzeInterviewRequest,
     AnalyzePhotoContext,
     ExtractRequest,
+    InterviewLanguage,
     InterviewQuestion,
     TranscribeResponse,
 )
 from app.transcribe import transcribe_audio
+from app.translate import translate_interview_transcript
 
 logger = logging.getLogger(__name__)
 
@@ -87,11 +89,20 @@ async def run_worker_loop(
                         result=extract_response.model_dump(mode="json"),
                     )
                 else:
+                    interview_language: InterviewLanguage = claim.get("interview_language") or "en"
                     audio_bytes, filename = await coordinator.download_audio(job_id)
-                    transcript_response = await _transcribe(whisper_model, audio_bytes, filename)
+                    transcript_response = await _transcribe(
+                        whisper_model,
+                        audio_bytes,
+                        filename,
+                        interview_language=interview_language,
+                    )
                     await coordinator.complete_transcription(
                         job_id,
-                        transcript=transcript_response.transcript,
+                        transcript=transcript_response.transcript_english,
+                        transcript_original=transcript_response.transcript_original,
+                        transcript_english=transcript_response.transcript_english,
+                        interview_language=transcript_response.interview_language,
                     )
                 logger.info("Completed job %s", job_id)
             except Exception as exc:
@@ -107,13 +118,44 @@ async def run_worker_loop(
             await asyncio.sleep(settings.worker_poll_interval_sec)
 
 
-async def _transcribe(whisper_model, audio_bytes: bytes, filename: str) -> TranscribeResponse:
+async def _transcribe(
+    whisper_model,
+    audio_bytes: bytes,
+    filename: str,
+    *,
+    interview_language: InterviewLanguage = "en",
+) -> TranscribeResponse:
     if settings.use_fake_transcription:
+        original = "LF812 stop for location at 7 Gul Ave. Case classified as false alarm malfunction."
+        english, translation_source = await translate_interview_transcript(
+            original,
+            interview_language,
+        )
         return TranscribeResponse(
-            transcript="LF812 stop for location at 7 Gul Ave. Case classified as false alarm malfunction.",
+            transcript_original=original,
+            transcript_english=english,
+            interview_language=interview_language,
             confidence=0.95,
             source="fake",
+            translation_source=translation_source,
         )
     if whisper_model is None:
         raise RuntimeError("Whisper model not loaded")
-    return await transcribe_audio(whisper_model, audio_bytes, filename)
+    response = await transcribe_audio(
+        whisper_model,
+        audio_bytes,
+        filename,
+        language=interview_language,
+    )
+    if interview_language != "en":
+        english, translation_source = await translate_interview_transcript(
+            response.transcript_original,
+            interview_language,
+        )
+        response = response.model_copy(
+            update={
+                "transcript_english": english,
+                "translation_source": translation_source,
+            }
+        )
+    return response

@@ -20,6 +20,10 @@ ExtractableField = Literal[
 ]
 
 
+InterviewLanguage = Literal["en", "ms", "ta", "zh"]
+TranslationSource = Literal["none", "fake", "ollama", "nim"]
+
+
 class ExtractRequest(BaseModel):
     text: str = Field(..., min_length=1, description="Stop message or field notes")
     type: Literal["stop_message", "field_notes"] = "stop_message"
@@ -33,9 +37,16 @@ class ExtractResponse(BaseModel):
 
 
 class TranscribeResponse(BaseModel):
-    transcript: str
+    transcript_original: str
+    transcript_english: str
+    interview_language: InterviewLanguage = "en"
     confidence: float | None = None
     source: Literal["fake", "whisper"] = "fake"
+    translation_source: TranslationSource = "none"
+
+    @property
+    def transcript(self) -> str:
+        return self.transcript_english
 
 
 class HealthResponse(BaseModel):

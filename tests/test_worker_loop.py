@@ -35,9 +35,12 @@ def test_worker_loop_processes_transcribe_claim():
     coordinator.fail = AsyncMock()
 
     fake_transcript = TranscribeResponse(
-        transcript="LF812 stop for location.",
+        transcript_original="LF812 stop for location.",
+        transcript_english="LF812 stop for location.",
+        interview_language="en",
         confidence=0.9,
         source="fake",
+        translation_source="none",
     )
     fake_extract = ExtractResponse(
         fields={"applianceCallSign": "LF812"},
@@ -72,6 +75,64 @@ def test_worker_loop_processes_transcribe_claim():
     coordinator.complete_extraction.assert_not_called()
     call_kwargs = coordinator.complete_transcription.call_args.kwargs
     assert call_kwargs["transcript"] == "LF812 stop for location."
+    assert call_kwargs["transcript_english"] == "LF812 stop for location."
+    assert call_kwargs["transcript_original"] == "LF812 stop for location."
+    assert call_kwargs["interview_language"] == "en"
+
+
+def test_worker_loop_processes_transcribe_claim_with_interview_language():
+    job_id = uuid4()
+    stop_event = asyncio.Event()
+    coordinator = AsyncMock()
+    coordinator.claim = AsyncMock(
+        side_effect=[
+            {
+                "job_id": str(job_id),
+                "phase": "transcribe",
+                "message_type": "field_notes",
+                "interview_language": "ms",
+            },
+            None,
+        ]
+    )
+    coordinator.download_audio = AsyncMock(return_value=(b"audio-bytes", "sample.webm"))
+    coordinator.complete_transcription = AsyncMock()
+    coordinator.fail = AsyncMock()
+
+    fake_transcript = TranscribeResponse(
+        transcript_original="Kebakaran di dapur.",
+        transcript_english="[EN] Kebakaran di dapur.",
+        interview_language="ms",
+        confidence=0.9,
+        source="fake",
+        translation_source="fake",
+    )
+
+    async def run_once():
+        with (
+            patch("app.worker_loop._transcribe", AsyncMock(return_value=fake_transcript)),
+            patch("app.worker_loop.settings") as mock_settings,
+        ):
+            mock_settings.worker_poll_interval_sec = 0.01
+            mock_settings.use_fake_transcription = True
+
+            task = asyncio.create_task(
+                run_worker_loop(coordinator, whisper_model=None, stop_event=stop_event)
+            )
+            await asyncio.sleep(0.05)
+            stop_event.set()
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    asyncio.run(run_once())
+
+    call_kwargs = coordinator.complete_transcription.call_args.kwargs
+    assert call_kwargs["interview_language"] == "ms"
+    assert call_kwargs["transcript_original"] == "Kebakaran di dapur."
+    assert call_kwargs["transcript_english"] == "[EN] Kebakaran di dapur."
 
 
 def test_worker_loop_processes_extract_claim():
