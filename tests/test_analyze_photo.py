@@ -6,13 +6,15 @@ from fastapi.testclient import TestClient
 from app.analyze_photo import (
     SUGGESTED_SECTION_CONFIDENCE_THRESHOLD,
     _build_user_prompt,
+    _derive_suggested_section,
     _normalize_section,
+    _parse_section_candidates,
     _resolve_section,
     _split_field_notes_excerpt,
 )
 from app.config import settings
 from app.main import app
-from app.schemas import AnalyzePhotoContext
+from app.schemas import AnalyzePhotoContext, SectionCandidate, SectionCandidates
 
 client = TestClient(app)
 
@@ -21,11 +23,14 @@ LLM_PHOTO_RESPONSE = """
 {
   "caption": "Charring on wooden door frame near the kitchen entrance.",
   "detected_elements": ["door frame charring", "smoke staining"],
-  "suggested_section": "burn_patterns",
-  "confidence": {
-    "caption": 0.88,
-    "suggested_section": 0.81
-  }
+  "section_candidates": {
+    "incident": { "score": 0.2, "reason": null },
+    "damages": { "score": 0.5, "reason": "door frame damage" },
+    "area_of_origin": { "score": 0.4, "reason": null },
+    "burn_patterns": { "score": 0.81, "reason": "door frame charring" },
+    "evidentiary": { "score": 0.3, "reason": null }
+  },
+  "confidence": { "caption": 0.88 }
 }
 ```
 """
@@ -114,6 +119,36 @@ def test_split_field_notes_excerpt_separates_prior_photos_block():
     assert prior.startswith("Photos already logged")
 
 
+def test_parse_section_candidates_and_derive_suggested_section():
+    parsed = {
+        "caption": "Soot on rubbish chute door.",
+        "section_candidates": {
+            "incident": {"score": 0.1, "reason": None},
+            "damages": {"score": 0.55, "reason": "charred door"},
+            "area_of_origin": {"score": 0.82, "reason": "rubbish chute opening"},
+            "burn_patterns": {"score": 0.78, "reason": "soot staining"},
+            "evidentiary": {"score": 0.2, "reason": None},
+        },
+    }
+    candidates = _parse_section_candidates(parsed)
+    assert candidates is not None
+    assert candidates.area_of_origin is not None
+    assert candidates.area_of_origin.score == 0.82
+
+    section, confidence = _derive_suggested_section(candidates)
+    assert section == "area_of_origin"
+    assert confidence == 0.82
+
+
+def test_derive_suggested_section_null_when_below_threshold():
+    candidates = SectionCandidates(
+        burn_patterns=SectionCandidate(score=0.5, reason="light soot"),
+    )
+    section, confidence = _derive_suggested_section(candidates)
+    assert section is None
+    assert confidence is None
+
+
 def test_analyze_photo_returns_fake_result():
     response = client.post(
         "/v1/analyze-photo",
@@ -123,6 +158,7 @@ def test_analyze_photo_returns_fake_result():
     data = response.json()
     assert data["source"] == "fake"
     assert data["suggested_section"] == "burn_patterns"
+    assert data["section_candidates"]["burn_patterns"]["score"] == 0.85
     assert data["caption"]
     assert isinstance(data["detected_elements"], list)
 
@@ -160,6 +196,7 @@ def test_analyze_photo_llm_parses_json():
     data = response.json()
     assert data["source"] == "ollama"
     assert data["suggested_section"] == "burn_patterns"
+    assert data["section_candidates"]["burn_patterns"]["score"] == 0.81
     assert "door frame" in data["caption"].lower()
 
 

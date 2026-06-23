@@ -10,6 +10,8 @@ from app.schemas import (
     AnalyzePhotoContext,
     AnalyzePhotoResponse,
     PhotoAnalysisConfidence,
+    SectionCandidate,
+    SectionCandidates,
     SuggestedPhotoSection,
 )
 
@@ -29,11 +31,14 @@ Return ONLY valid JSON with this shape:
 {
   "caption": "1-2 sentence description of what is visible in THIS image",
   "detected_elements": ["short", "observable", "labels"],
-  "suggested_section": "burn_patterns",
-  "confidence": {
-    "caption": 0.85,
-    "suggested_section": 0.78
-  }
+  "section_candidates": {
+    "incident": { "score": 0.2, "reason": null },
+    "damages": { "score": 0.6, "reason": "charred furniture visible" },
+    "area_of_origin": { "score": 0.82, "reason": "rubbish chute opening" },
+    "burn_patterns": { "score": 0.74, "reason": "soot staining on wall" },
+    "evidentiary": { "score": 0.3, "reason": null }
+  },
+  "confidence": { "caption": 0.85 }
 }
 
 CAPTION RULES (critical):
@@ -47,18 +52,18 @@ GOOD caption example:
 BAD caption example (do not output text like this):
 "Investigation of a moderate fire incident at 7 Gull Avenue. The fire is believed to have originated in the rubbish chute..."
 
-suggested_section — pick the best report link for THIS image, or null if none fit confidently:
-- area_of_origin: Section 5b — visible seat-of-fire or origin indicators (e.g. rubbish chute opening, localized burn seat)
+section_candidates — score EACH section independently from visible features only (0.0 to 1.0):
+- incident: Section 2 — general scene or overview photos
+- damages: Section 2 — property or content damage visible
+- area_of_origin: Section 5b — seat-of-fire or origin indicators (e.g. rubbish chute opening, localized burn seat)
 - burn_patterns: Section 5c — char patterns, smoke staining, fire spread or heat indicators
 - evidentiary: Section 5d — physical evidence items visible (e.g. ignition source remnants, debris)
-- damages: property or content damage visible
-- incident: general scene or overview photos
 
-Do NOT use appliance, vehicle, or other as suggested_section values.
-Subject matter such as vehicles or appliances belongs in caption and detected_elements only.
+For each section candidate, reason is one short visual phrase based on what you see, or null when score is low.
+Score sections independently — a photo may score highly on multiple sections.
 
 detected_elements: short observable labels only (e.g. "ceiling charring", "smoke staining", "rubbish chute door").
-confidence values are 0.0 to 1.0. Use suggested_section null when no section fits confidently.
+confidence.caption is 0.0 to 1.0.
 """.strip()
 
 PRIOR_PHOTOS_HEADER = "Photos already logged (describe what is different in THIS image):"
@@ -153,6 +158,61 @@ def _resolve_section(
     return section
 
 
+def _parse_candidate_value(raw: object) -> SectionCandidate | None:
+    if not isinstance(raw, dict):
+        return None
+    try:
+        score = max(0.0, min(1.0, float(raw.get("score", 0))))
+    except (TypeError, ValueError):
+        return None
+    reason_raw = raw.get("reason")
+    reason: str | None = None
+    if reason_raw is not None:
+        reason_str = str(reason_raw).strip()
+        if reason_str and reason_str.lower() not in {"null", "none"}:
+            reason = reason_str
+    return SectionCandidate(score=score, reason=reason)
+
+
+def _parse_section_candidates(parsed: dict) -> SectionCandidates | None:
+    raw = parsed.get("section_candidates")
+    if not isinstance(raw, dict):
+        return None
+
+    candidates = SectionCandidates(
+        incident=_parse_candidate_value(raw.get("incident")),
+        damages=_parse_candidate_value(raw.get("damages")),
+        area_of_origin=_parse_candidate_value(raw.get("area_of_origin")),
+        burn_patterns=_parse_candidate_value(raw.get("burn_patterns")),
+        evidentiary=_parse_candidate_value(raw.get("evidentiary")),
+    )
+    if all(getattr(candidates, section) is None for section in VALID_SECTIONS):
+        return None
+    return candidates
+
+
+def _derive_suggested_section(
+    candidates: SectionCandidates | None,
+) -> tuple[SuggestedPhotoSection | None, float | None]:
+    if candidates is None:
+        return None, None
+
+    best_section: SuggestedPhotoSection | None = None
+    best_score: float | None = None
+    for section in VALID_SECTIONS:
+        candidate = getattr(candidates, section)
+        if candidate is None:
+            continue
+        if best_score is None or candidate.score > best_score:
+            best_section = section  # type: ignore[assignment]
+            best_score = candidate.score
+
+    resolved = _resolve_section(best_section, best_score)
+    if resolved is None:
+        return None, None
+    return resolved, best_score
+
+
 def _split_field_notes_excerpt(
     excerpt: str | None,
 ) -> tuple[str | None, str | None]:
@@ -220,11 +280,19 @@ def _build_user_prompt(context: AnalyzePhotoContext | None) -> str:
 
 
 def fake_analyze_photo(_context: AnalyzePhotoContext | None = None) -> AnalyzePhotoResponse:
+    section_candidates = SectionCandidates(
+        incident=SectionCandidate(score=0.15, reason=None),
+        damages=SectionCandidate(score=0.4, reason=None),
+        area_of_origin=SectionCandidate(score=0.35, reason=None),
+        burn_patterns=SectionCandidate(score=0.85, reason="ceiling charring visible"),
+        evidentiary=SectionCandidate(score=0.2, reason=None),
+    )
     return AnalyzePhotoResponse(
         caption="Charring and smoke staining observed on ceiling lining above the seating area.",
         detected_elements=["ceiling charring", "smoke staining"],
         suggested_section="burn_patterns",
-        confidence=PhotoAnalysisConfidence(caption=0.85, suggested_section=0.78),
+        section_candidates=section_candidates,
+        confidence=PhotoAnalysisConfidence(caption=0.85, suggested_section=0.85),
         source="fake",
     )
 
@@ -294,26 +362,33 @@ async def llm_analyze_photo(
 
     confidence_raw = parsed.get("confidence", {})
     caption_confidence = 0.0
-    section_confidence: float | None = None
     if isinstance(confidence_raw, dict):
         try:
             caption_confidence = max(0.0, min(1.0, float(confidence_raw.get("caption", 0.0))))
         except (TypeError, ValueError):
             caption_confidence = 0.0
-        raw_section_conf = confidence_raw.get("suggested_section")
-        if raw_section_conf is not None:
-            try:
-                section_confidence = max(0.0, min(1.0, float(raw_section_conf)))
-            except (TypeError, ValueError):
-                section_confidence = None
 
-    normalized_section = _normalize_section(parsed.get("suggested_section"))
-    resolved_section = _resolve_section(normalized_section, section_confidence)
+    section_candidates = _parse_section_candidates(parsed)
+    resolved_section, section_confidence = _derive_suggested_section(section_candidates)
+
+    if resolved_section is None:
+        legacy_section = _normalize_section(parsed.get("suggested_section"))
+        legacy_confidence: float | None = None
+        if isinstance(confidence_raw, dict):
+            raw_section_conf = confidence_raw.get("suggested_section")
+            if raw_section_conf is not None:
+                try:
+                    legacy_confidence = max(0.0, min(1.0, float(raw_section_conf)))
+                except (TypeError, ValueError):
+                    legacy_confidence = None
+        resolved_section = _resolve_section(legacy_section, legacy_confidence)
+        section_confidence = legacy_confidence if resolved_section else None
 
     return AnalyzePhotoResponse(
         caption=caption,
         detected_elements=detected_elements,
         suggested_section=resolved_section,
+        section_candidates=section_candidates,
         confidence=PhotoAnalysisConfidence(
             caption=caption_confidence,
             suggested_section=section_confidence,
