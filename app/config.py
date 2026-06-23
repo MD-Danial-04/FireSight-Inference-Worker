@@ -11,6 +11,7 @@ class Settings(BaseSettings):
 
     use_fake_extraction: bool = True
     use_fake_transcription: bool = True
+    use_fake_photo_analysis: bool = True
 
     llm_base_url: str = Field(
         default="http://localhost:11434/v1",
@@ -23,6 +24,10 @@ class Settings(BaseSettings):
     llm_api_key: str = Field(
         default="ollama",
         validation_alias=AliasChoices("LLM_API_KEY", "NIM_API_KEY"),
+    )
+    vision_model: str = Field(
+        default="llava",
+        validation_alias=AliasChoices("VISION_MODEL", "LLM_VISION_MODEL"),
     )
 
     whisper_model: str = "base"

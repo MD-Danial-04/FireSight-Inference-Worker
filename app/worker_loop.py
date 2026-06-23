@@ -2,10 +2,11 @@ import asyncio
 import logging
 from uuid import UUID
 
+from app.analyze_interview import analyze_interview_coverage
 from app.coordinator_client import CoordinatorClient
 from app.config import settings
 from app.extract import extract_fields
-from app.schemas import ExtractRequest, TranscribeResponse
+from app.schemas import AnalyzeInterviewRequest, ExtractRequest, InterviewQuestion, TranscribeResponse
 from app.transcribe import transcribe_audio
 
 logger = logging.getLogger(__name__)
@@ -26,25 +27,54 @@ async def run_worker_loop(
                 continue
 
             job_id = UUID(claim["job_id"])
+            phase = claim.get("phase", "transcribe")
             message_type = claim.get("message_type", "stop_message")
             incident_type_name = claim.get("incident_type_name")
-            logger.info("Claimed job %s (type=%s)", job_id, message_type)
+            logger.info("Claimed job %s (phase=%s type=%s)", job_id, phase, message_type)
 
             try:
-                audio_bytes, filename = await coordinator.download_audio(job_id)
-                transcript_response = await _transcribe(whisper_model, audio_bytes, filename)
-                extract_response = await extract_fields(
-                    ExtractRequest(
-                        text=transcript_response.transcript,
-                        type=message_type,
-                        incident_type_name=incident_type_name,
+                if phase == "analyze_interview":
+                    transcript_text = (claim.get("transcript") or "").strip()
+                    questions_raw = claim.get("analysis_questions") or []
+                    if not transcript_text:
+                        raise RuntimeError("Analyze interview claim missing transcript")
+                    if not questions_raw:
+                        raise RuntimeError("Analyze interview claim missing questions")
+                    questions = [
+                        InterviewQuestion.model_validate(q) for q in questions_raw
+                    ]
+                    analysis_response = await analyze_interview_coverage(
+                        AnalyzeInterviewRequest(
+                            transcript=transcript_text,
+                            questions=questions,
+                        )
                     )
-                )
-                await coordinator.complete(
-                    job_id,
-                    transcript=transcript_response.transcript,
-                    result=extract_response.model_dump(mode="json"),
-                )
+                    await coordinator.complete_analysis(
+                        job_id,
+                        result=analysis_response.model_dump(mode="json"),
+                    )
+                elif phase == "extract":
+                    transcript_text = (claim.get("transcript") or "").strip()
+                    if not transcript_text:
+                        raise RuntimeError("Extract claim missing transcript")
+                    extract_response = await extract_fields(
+                        ExtractRequest(
+                            text=transcript_text,
+                            type=message_type,
+                            incident_type_name=incident_type_name,
+                        )
+                    )
+                    await coordinator.complete_extraction(
+                        job_id,
+                        result=extract_response.model_dump(mode="json"),
+                    )
+                else:
+                    audio_bytes, filename = await coordinator.download_audio(job_id)
+                    transcript_response = await _transcribe(whisper_model, audio_bytes, filename)
+                    await coordinator.complete_transcription(
+                        job_id,
+                        transcript=transcript_response.transcript,
+                    )
                 logger.info("Completed job %s", job_id)
             except Exception as exc:
                 logger.exception("Job %s failed", job_id)

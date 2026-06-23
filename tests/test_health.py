@@ -69,6 +69,7 @@ def test_health_returns_ok():
     assert data["status"] == "ok"
     assert data["fake_extraction"] is True
     assert data["fake_transcription"] is True
+    assert data["fake_photo_analysis"] is True
 
 
 def test_health_reports_llm_and_whisper_config():

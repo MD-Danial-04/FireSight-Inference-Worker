@@ -36,12 +36,30 @@ class CoordinatorClient:
                 filename = content_disposition.split("filename=", 1)[1].strip('"')
             return response.content, filename
 
-    async def complete(self, job_id: UUID, *, transcript: str, result: dict) -> None:
+    async def complete_transcription(self, job_id: UUID, *, transcript: str) -> None:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                f"{self._base}/v1/worker/jobs/{job_id}/complete",
+                f"{self._base}/v1/worker/jobs/{job_id}/transcribe",
                 headers=self._headers,
-                json={"transcript": transcript, "result": result},
+                json={"transcript": transcript},
+            )
+            response.raise_for_status()
+
+    async def complete_extraction(self, job_id: UUID, *, result: dict) -> None:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{self._base}/v1/worker/jobs/{job_id}/complete-extraction",
+                headers=self._headers,
+                json={"result": result},
+            )
+            response.raise_for_status()
+
+    async def complete_analysis(self, job_id: UUID, *, result: dict) -> None:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{self._base}/v1/worker/jobs/{job_id}/complete-analysis",
+                headers=self._headers,
+                json={"result": result},
             )
             response.raise_for_status()
 
