@@ -3,10 +3,17 @@ import logging
 from uuid import UUID
 
 from app.analyze_interview import analyze_interview_coverage
+from app.analyze_photo import analyze_photo_for_worker
 from app.coordinator_client import CoordinatorClient
 from app.config import settings
 from app.extract import extract_fields
-from app.schemas import AnalyzeInterviewRequest, ExtractRequest, InterviewQuestion, TranscribeResponse
+from app.schemas import (
+    AnalyzeInterviewRequest,
+    AnalyzePhotoContext,
+    ExtractRequest,
+    InterviewQuestion,
+    TranscribeResponse,
+)
 from app.transcribe import transcribe_audio
 
 logger = logging.getLogger(__name__)
@@ -52,6 +59,17 @@ async def run_worker_loop(
                     await coordinator.complete_analysis(
                         job_id,
                         result=analysis_response.model_dump(mode="json"),
+                    )
+                elif phase == "analyze_photo":
+                    image_bytes, _filename = await coordinator.download_image(job_id)
+                    if not image_bytes:
+                        raise RuntimeError("Analyze photo claim missing image")
+                    ctx_raw = claim.get("photo_context") or {}
+                    context = AnalyzePhotoContext.model_validate(ctx_raw)
+                    photo_response = await analyze_photo_for_worker(image_bytes, context)
+                    await coordinator.complete_photo_analysis(
+                        job_id,
+                        result=photo_response.model_dump(mode="json"),
                     )
                 elif phase == "extract":
                     transcript_text = (claim.get("transcript") or "").strip()

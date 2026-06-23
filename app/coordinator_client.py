@@ -63,6 +63,28 @@ class CoordinatorClient:
             )
             response.raise_for_status()
 
+    async def download_image(self, job_id: UUID) -> tuple[bytes, str]:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.get(
+                f"{self._base}/v1/worker/jobs/{job_id}/image",
+                headers=self._headers,
+            )
+            response.raise_for_status()
+            content_disposition = response.headers.get("content-disposition", "")
+            filename = "photo.jpg"
+            if "filename=" in content_disposition:
+                filename = content_disposition.split("filename=", 1)[1].strip('"')
+            return response.content, filename
+
+    async def complete_photo_analysis(self, job_id: UUID, *, result: dict) -> None:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{self._base}/v1/worker/jobs/{job_id}/complete-photo-analysis",
+                headers=self._headers,
+                json={"result": result},
+            )
+            response.raise_for_status()
+
     async def fail(self, job_id: UUID, *, error: str) -> None:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(

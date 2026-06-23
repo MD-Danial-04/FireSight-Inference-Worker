@@ -263,3 +263,13 @@ async def analyze_photo(
     if settings.use_fake_photo_analysis:
         return fake_analyze_photo(context)
     return await llm_analyze_photo(image_bytes, context)
+
+
+async def analyze_photo_for_worker(
+    image_bytes: bytes,
+    context: AnalyzePhotoContext | None = None,
+) -> AnalyzePhotoResponse:
+    try:
+        return await analyze_photo(image_bytes, context)
+    except HTTPException as exc:
+        raise RuntimeError(exc.detail) from exc
