@@ -5,11 +5,14 @@ from fastapi.testclient import TestClient
 
 from app.analyze_photo import (
     SUGGESTED_SECTION_CONFIDENCE_THRESHOLD,
+    _build_user_prompt,
     _normalize_section,
     _resolve_section,
+    _split_field_notes_excerpt,
 )
 from app.config import settings
 from app.main import app
+from app.schemas import AnalyzePhotoContext
 
 client = TestClient(app)
 
@@ -62,6 +65,53 @@ def test_resolve_section_applies_threshold():
     assert _resolve_section("damages", SUGGESTED_SECTION_CONFIDENCE_THRESHOLD) == "damages"
     assert _resolve_section("damages", SUGGESTED_SECTION_CONFIDENCE_THRESHOLD - 0.01) is None
     assert _resolve_section(None, 0.9) is None
+
+
+def test_build_user_prompt_prioritizes_visual_description():
+    prompt = _build_user_prompt(
+        AnalyzePhotoContext(
+            location_of_fire="7 Gull Ave",
+            incident_type_name="Fire (Moderate) — Rubbish Chute",
+            stop_message_excerpt="LF812 stop at 7 Gull Avenue, black smoke showing",
+            field_notes_excerpt=(
+                "Photos already logged (describe what is different in THIS image):\n"
+                "Photo 9 (IMG_0041) [burn_patterns]: ceiling charring, smoke staining"
+            ),
+        ),
+    )
+
+    assert "Describe ONLY what is visible" in prompt
+    assert "CLASSIFICATION HINTS" in prompt
+    assert "7 Gull Ave" in prompt
+    assert "Photos already logged" in prompt
+    assert "BACKGROUND (do not copy into caption)" in prompt
+    assert "Stop message excerpt:" not in prompt
+    assert "Field notes excerpt:" not in prompt
+
+
+def test_build_user_prompt_omits_stop_message_when_not_provided():
+    prompt = _build_user_prompt(
+        AnalyzePhotoContext(
+            location_of_fire="Blk 1",
+            field_notes_excerpt="Short investigator note.",
+        ),
+    )
+
+    assert "BACKGROUND" not in prompt
+    assert "INVESTIGATOR NOTES" in prompt
+    assert "Short investigator note." in prompt
+
+
+def test_split_field_notes_excerpt_separates_prior_photos_block():
+    investigator, prior = _split_field_notes_excerpt(
+        "Investigator notes here.\n\n"
+        "Photos already logged (describe what is different in THIS image):\n"
+        "Photo 1 (IMG_001) [burn_patterns]: charring",
+    )
+
+    assert investigator == "Investigator notes here."
+    assert prior is not None
+    assert prior.startswith("Photos already logged")
 
 
 def test_analyze_photo_returns_fake_result():

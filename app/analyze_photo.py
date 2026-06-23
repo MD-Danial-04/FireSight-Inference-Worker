@@ -27,7 +27,7 @@ SYSTEM_PROMPT = """
 You analyze fire-scene investigation photographs for a Singapore Civil Defence Force (SCDF) fire report.
 Return ONLY valid JSON with this shape:
 {
-  "caption": "1-2 sentence investigation-style description for the annex photo log",
+  "caption": "1-2 sentence description of what is visible in THIS image",
   "detected_elements": ["short", "observable", "labels"],
   "suggested_section": "burn_patterns",
   "confidence": {
@@ -36,19 +36,33 @@ Return ONLY valid JSON with this shape:
   }
 }
 
-suggested_section must be exactly one of these five values, or null if none apply confidently:
-- incident: general scene or overview photos referenced with Annex A
-- damages: property or content damage
-- area_of_origin: where the fire likely originated
-- burn_patterns: char patterns, smoke staining, fire spread indicators
-- evidentiary: physical evidence relevant to cause
+CAPTION RULES (critical):
+- Describe ONLY observable visual facts in THIS photograph: charring, soot, smoke staining, melt damage, burn patterns, heat marks, damaged surfaces, rubbish contents, physical evidence items, etc.
+- Do NOT copy or paraphrase stop message text, incident summaries, location narratives, field notes, or prior photo descriptions into the caption.
+- Each photo caption must be distinct and specific to what is visible in this frame.
+
+GOOD caption example:
+"Heavy soot staining and charring on the rubbish chute door and adjacent wall lining."
+
+BAD caption example (do not output text like this):
+"Investigation of a moderate fire incident at 7 Gull Avenue. The fire is believed to have originated in the rubbish chute..."
+
+suggested_section — pick the best report link for THIS image, or null if none fit confidently:
+- area_of_origin: Section 5b — visible seat-of-fire or origin indicators (e.g. rubbish chute opening, localized burn seat)
+- burn_patterns: Section 5c — char patterns, smoke staining, fire spread or heat indicators
+- evidentiary: Section 5d — physical evidence items visible (e.g. ignition source remnants, debris)
+- damages: property or content damage visible
+- incident: general scene or overview photos
 
 Do NOT use appliance, vehicle, or other as suggested_section values.
 Subject matter such as vehicles or appliances belongs in caption and detected_elements only.
 
-detected_elements: short observable labels only (e.g. "ceiling charring", "smoke staining").
+detected_elements: short observable labels only (e.g. "ceiling charring", "smoke staining", "rubbish chute door").
 confidence values are 0.0 to 1.0. Use suggested_section null when no section fits confidently.
 """.strip()
+
+PRIOR_PHOTOS_HEADER = "Photos already logged (describe what is different in THIS image):"
+LEGACY_PRIOR_PHOTOS_HEADER = "Prior photo log captions"
 
 
 def _extract_json_text(content: str) -> str:
@@ -139,17 +153,69 @@ def _resolve_section(
     return section
 
 
+def _split_field_notes_excerpt(
+    excerpt: str | None,
+) -> tuple[str | None, str | None]:
+    if not excerpt or not excerpt.strip():
+        return None, None
+
+    text = excerpt.strip()
+    for header in (PRIOR_PHOTOS_HEADER, LEGACY_PRIOR_PHOTOS_HEADER):
+        idx = text.find(header)
+        if idx != -1:
+            investigator_notes = text[:idx].strip() or None
+            prior_block = text[idx:].strip()
+            return investigator_notes, prior_block
+
+    return text, None
+
+
+def _truncate_background(text: str, max_length: int = 120) -> str:
+    trimmed = text.strip()
+    if len(trimmed) <= max_length:
+        return trimmed
+    return f"{trimmed[:max_length]}…"
+
+
 def _build_user_prompt(context: AnalyzePhotoContext | None) -> str:
-    lines = ["Describe this fire-scene photograph for an investigation annex."]
-    if context:
-        if context.location_of_fire:
-            lines.append(f"Location of fire: {context.location_of_fire}")
-        if context.incident_type_name:
-            lines.append(f"Incident type: {context.incident_type_name}")
-        if context.stop_message_excerpt:
-            lines.append(f"Stop message excerpt: {context.stop_message_excerpt}")
-        if context.field_notes_excerpt:
-            lines.append(f"Field notes excerpt: {context.field_notes_excerpt}")
+    lines = [
+        "Describe ONLY what is visible in this photograph.",
+        "Focus on observable fire effects: charring, soot, smoke staining, melt damage, burn patterns, heat marks, and physical evidence visible in the frame.",
+        "Do not restate stop message, incident summary, or prior photo descriptions in the caption.",
+    ]
+
+    if not context:
+        return "\n".join(lines)
+
+    classification_hints: list[str] = []
+    if context.location_of_fire:
+        classification_hints.append(f"- Location: {context.location_of_fire}")
+    if context.incident_type_name:
+        classification_hints.append(f"- Incident: {context.incident_type_name}")
+
+    if classification_hints:
+        lines.append("")
+        lines.append(
+            "CLASSIFICATION HINTS (for suggested_section only — do not repeat in caption):",
+        )
+        lines.extend(classification_hints)
+
+    investigator_notes, prior_photos = _split_field_notes_excerpt(context.field_notes_excerpt)
+
+    if investigator_notes:
+        lines.append("")
+        lines.append("INVESTIGATOR NOTES (background only — do not repeat in caption):")
+        lines.append(investigator_notes)
+
+    if prior_photos:
+        lines.append("")
+        lines.append(prior_photos)
+
+    if context.stop_message_excerpt:
+        lines.append("")
+        lines.append("BACKGROUND (do not copy into caption):")
+        lines.append(_truncate_background(context.stop_message_excerpt))
+
     return "\n".join(lines)
 
 
