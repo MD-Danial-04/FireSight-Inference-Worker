@@ -29,6 +29,7 @@ DEFAULT_OUTPUT_DIR = (
     / "src"
     / "app"
     / "constants"
+    / "leadingQuestions"
 )
 
 LANGUAGE_NAMES = {
@@ -301,7 +302,7 @@ def render_template_file(
     lines = [
         'import type { LeadingQuestion } from "./leadingQuestions";',
         'import { loc } from "./leadingQuestions";',
-        "",
+        ""
         f"export const {title_export_name} = {ts_string(title)};",
         "",
         f"export const {export_name}: LeadingQuestion[] = [",

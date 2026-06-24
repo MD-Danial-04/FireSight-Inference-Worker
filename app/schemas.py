@@ -19,6 +19,29 @@ ExtractableField = Literal[
     "handoverNpc",
 ]
 
+InterviewExtractableField = Literal[
+    "name",
+    "nameChinese",
+    "designation",
+    "nric",
+    "passportNo",
+    "nationality",
+    "sex",
+    "age",
+    "dateAndPlaceOfBirth",
+    "maritalStatus",
+    "numberOfChildren",
+    "citizenshipCertNo",
+    "vehicleNo",
+    "address",
+    "placeOfEmployment",
+    "contactHome",
+    "contactMobile",
+    "contactOffice",
+    "interviewTakenPlace",
+    "interpretedBy",
+]
+
 
 InterviewLanguage = Literal["en", "ms", "ta", "zh"]
 TranslationSource = Literal["none", "fake", "ollama", "nim"]
@@ -26,13 +49,23 @@ TranslationSource = Literal["none", "fake", "ollama", "nim"]
 
 class ExtractRequest(BaseModel):
     text: str = Field(..., min_length=1, description="Stop message or field notes")
-    type: Literal["stop_message", "field_notes"] = "stop_message"
+    type: Literal["stop_message", "field_notes", "interview"] = "stop_message"
     incident_type_name: str | None = None
 
 
 class ExtractResponse(BaseModel):
     fields: dict[ExtractableField, str]
     confidence: dict[ExtractableField, float]
+    source: Literal["fake", "ollama", "nim", "regex_fallback"] = "fake"
+
+class ExtractInterviewRequest(BaseModel):
+    text: str = Field(..., min_length=1, description="Interview transcript text")
+    interview_language: InterviewLanguage = "en"
+
+
+class ExtractInterviewResponse(BaseModel):
+    fields: dict[InterviewExtractableField, str]
+    confidence: dict[InterviewExtractableField, float]
     source: Literal["fake", "ollama", "nim", "regex_fallback"] = "fake"
 
 

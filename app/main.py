@@ -10,6 +10,7 @@ from app.analyze_photo import analyze_photo
 from app.coordinator_client import get_coordinator_client
 from app.config import settings
 from app.extract import extract_fields
+from app.extract_interview import extract_interview_details
 from app.schemas import (
     AnalyzeInterviewRequest,
     AnalyzeInterviewResponse,
@@ -17,6 +18,8 @@ from app.schemas import (
     AnalyzePhotoResponse,
     ExtractRequest,
     ExtractResponse,
+    ExtractInterviewRequest,
+    ExtractInterviewResponse,
     HealthResponse,
     InterviewLanguage,
     TranscribeResponse,
@@ -82,6 +85,11 @@ async def health() -> HealthResponse:
 @app.post("/v1/extract", response_model=ExtractResponse)
 async def extract(req: ExtractRequest) -> ExtractResponse:
     return await extract_fields(req)
+
+
+@app.post("/v1/extract-interview", response_model=ExtractInterviewResponse)
+async def extract_interview(req: ExtractInterviewRequest) -> ExtractInterviewResponse:
+    return await extract_interview_details(req)
 
 
 @app.post("/v1/analyze-interview", response_model=AnalyzeInterviewResponse)

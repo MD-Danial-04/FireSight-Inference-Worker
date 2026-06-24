@@ -7,10 +7,12 @@ from app.analyze_photo import analyze_photo_for_worker
 from app.coordinator_client import CoordinatorClient
 from app.config import settings
 from app.extract import extract_fields
+from app.extract_interview import extract_interview_details
 from app.schemas import (
     AnalyzeInterviewRequest,
     AnalyzePhotoContext,
     ExtractRequest,
+    ExtractInterviewRequest,
     InterviewLanguage,
     InterviewQuestion,
     TranscribeResponse,
@@ -79,17 +81,29 @@ async def run_worker_loop(
                     transcript_text = (claim.get("transcript") or "").strip()
                     if not transcript_text:
                         raise RuntimeError("Extract claim missing transcript")
-                    extract_response = await extract_fields(
-                        ExtractRequest(
-                            text=transcript_text,
-                            type=message_type,
-                            incident_type_name=incident_type_name,
+                    if message_type == "interview":
+                        extract_response = await extract_interview_details(
+                            ExtractInterviewRequest(
+                                text=transcript_text,
+                                interview_language=claim.get("interview_language") or "en",
+                            )
                         )
-                    )
-                    await coordinator.complete_extraction(
-                        job_id,
-                        result=extract_response.model_dump(mode="json"),
-                    )
+                        await coordinator.complete_extraction(
+                            job_id,
+                            interview_details=extract_response.model_dump(mode="json"),
+                        )
+                    else:
+                        extract_response = await extract_fields(
+                            ExtractRequest(
+                                text=transcript_text,
+                                type=message_type,
+                                incident_type_name=incident_type_name,
+                            )
+                        )
+                        await coordinator.complete_extraction(
+                            job_id,
+                            result=extract_response.model_dump(mode="json"),
+                        )
                 else:
                     interview_language: InterviewLanguage = claim.get("interview_language") or "en"
                     audio_bytes, filename = await coordinator.download_audio(job_id)

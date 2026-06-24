@@ -5,6 +5,7 @@ from uuid import uuid4
 from app.schemas import (
     AnalyzeInterviewResponse,
     AnalyzePhotoResponse,
+    ExtractInterviewResponse,
     ExtractResponse,
     PhotoAnalysisConfidence,
     QuestionCoverage,
@@ -189,6 +190,106 @@ def test_worker_loop_processes_extract_claim():
     coordinator.complete_extraction.assert_called_once()
     call_kwargs = coordinator.complete_extraction.call_args.kwargs
     assert call_kwargs["result"]["fields"]["applianceCallSign"] == "LF812"
+
+
+def test_worker_loop_processes_interview_extract_claim():
+    job_id = uuid4()
+    stop_event = asyncio.Event()
+    coordinator = AsyncMock()
+    coordinator.claim = AsyncMock(
+        side_effect=[
+            {
+                "job_id": str(job_id),
+                "phase": "extract",
+                "message_type": "interview",
+                "interview_language": "en",
+                "transcript": "My name is John Tan, NRIC S1234567A, contact 91234567.",
+            },
+            None,
+        ]
+    )
+    coordinator.download_audio = AsyncMock()
+    coordinator.complete_transcription = AsyncMock()
+    coordinator.complete_extraction = AsyncMock()
+    coordinator.complete_analysis = AsyncMock()
+    coordinator.fail = AsyncMock()
+
+    fake_extract = ExtractInterviewResponse(
+        fields={
+            "name": "John Tan",
+            "nameChinese": "",
+            "designation": "",
+            "nric": "S1234567A",
+            "passportNo": "",
+            "nationality": "",
+            "sex": "",
+            "age": "",
+            "dateAndPlaceOfBirth": "",
+            "maritalStatus": "",
+            "numberOfChildren": "",
+            "citizenshipCertNo": "",
+            "vehicleNo": "",
+            "address": "",
+            "placeOfEmployment": "",
+            "contactHome": "",
+            "contactMobile": "91234567",
+            "contactOffice": "",
+            "interviewTakenPlace": "",
+            "interpretedBy": "",
+        },
+        confidence={
+            "name": 0.9,
+            "nameChinese": 0.0,
+            "designation": 0.0,
+            "nric": 0.95,
+            "passportNo": 0.0,
+            "nationality": 0.0,
+            "sex": 0.0,
+            "age": 0.0,
+            "dateAndPlaceOfBirth": 0.0,
+            "maritalStatus": 0.0,
+            "numberOfChildren": 0.0,
+            "citizenshipCertNo": 0.0,
+            "vehicleNo": 0.0,
+            "address": 0.0,
+            "placeOfEmployment": 0.0,
+            "contactHome": 0.0,
+            "contactMobile": 0.85,
+            "contactOffice": 0.0,
+            "interviewTakenPlace": 0.0,
+            "interpretedBy": 0.0,
+        },
+        source="fake",
+    )
+
+    async def run_once():
+        with (
+            patch(
+                "app.worker_loop.extract_interview_details",
+                AsyncMock(return_value=fake_extract),
+            ),
+            patch("app.worker_loop.settings") as mock_settings,
+        ):
+            mock_settings.worker_poll_interval_sec = 0.01
+            mock_settings.use_fake_transcription = True
+
+            task = asyncio.create_task(
+                run_worker_loop(coordinator, whisper_model=None, stop_event=stop_event)
+            )
+            await asyncio.sleep(0.05)
+            stop_event.set()
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    asyncio.run(run_once())
+
+    coordinator.complete_extraction.assert_called_once()
+    call_kwargs = coordinator.complete_extraction.call_args.kwargs
+    assert call_kwargs["interview_details"]["fields"]["name"] == "John Tan"
+    assert "result" not in call_kwargs or call_kwargs["result"] is None
 
 
 def test_worker_loop_processes_analyze_interview_claim():

@@ -60,12 +60,23 @@ class CoordinatorClient:
             )
             response.raise_for_status()
 
-    async def complete_extraction(self, job_id: UUID, *, result: dict) -> None:
+    async def complete_extraction(
+        self,
+        job_id: UUID,
+        *,
+        result: dict | None = None,
+        interview_details: dict | None = None,
+    ) -> None:
+        payload: dict = {}
+        if result is not None:
+            payload["result"] = result
+        if interview_details is not None:
+            payload["interview_details"] = interview_details
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 f"{self._base}/v1/worker/jobs/{job_id}/complete-extraction",
                 headers=self._headers,
-                json={"result": result},
+                json=payload,
             )
             response.raise_for_status()
 
