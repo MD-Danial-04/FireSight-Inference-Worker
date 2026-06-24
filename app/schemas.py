@@ -77,30 +77,6 @@ class AnalyzeInterviewRequest(BaseModel):
     interview_language: InterviewLanguage = "en"
 
 
-class TranslateInterviewQuestionInput(BaseModel):
-    id: str = Field(..., min_length=1)
-    prompt: str = Field(..., min_length=1)
-    hint: str | None = None
-    section: str | None = None
-
-
-class TranslateQuestionsRequest(BaseModel):
-    questions: list[TranslateInterviewQuestionInput] = Field(..., min_length=1)
-    interview_language: InterviewLanguage
-
-
-class TranslatedInterviewQuestion(BaseModel):
-    id: str
-    prompt_conduct: str
-    hint_conduct: str | None = None
-    section_conduct: str | None = None
-
-
-class QuestionTranslationResult(BaseModel):
-    questions: list[TranslatedInterviewQuestion]
-    source: Literal["fake", "ollama", "nim"] = "fake"
-
-
 class QuestionCoverage(BaseModel):
     id: str
     status: QuestionCoverageStatus

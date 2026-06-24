@@ -1,0 +1,342 @@
+{
+  "amd": {
+    "title": "AMD / PMD / PAB / PMA — Leading questions",
+    "export_name": "AMD_LEADING_QUESTIONS",
+    "title_export_name": "AMD_LEADING_QUESTIONS_TITLE",
+    "questions": [
+      {
+        "id": "device-type",
+        "section": "Affected device",
+        "prompt": "What type of mobility device is it?",
+        "hint": "e.g. PMD, PAB, PMA"
+      },
+      {
+        "id": "device-model",
+        "section": "Affected device",
+        "prompt": "What is the device's model?"
+      },
+      {
+        "id": "battery-type",
+        "section": "Affected device",
+        "prompt": "What type of battery does the device use?",
+        "hint": "e.g. lithium-ion (Li-ion), lead acid"
+      },
+      {
+        "id": "battery-brand",
+        "section": "Affected device",
+        "prompt": "What is the battery's brand?"
+      },
+      {
+        "id": "battery-model",
+        "section": "Affected device",
+        "prompt": "What is the battery's model?"
+      },
+      {
+        "id": "battery-oem",
+        "section": "Affected device",
+        "prompt": "Was the battery provided by the Original Equipment Manufacturer (OEM)?"
+      },
+      {
+        "id": "modifications",
+        "section": "Affected device",
+        "prompt": "Have any modifications been made to the device?"
+      },
+      {
+        "id": "main-use",
+        "section": "Affected device",
+        "prompt": "What is the main use of the device?"
+      },
+      {
+        "id": "last-used-date",
+        "section": "Affected device",
+        "prompt": "When was the device last used?"
+      },
+      {
+        "id": "last-used-duration",
+        "section": "Affected device",
+        "prompt": "How long was the device used for before the incident?",
+        "hint": "e.g. 2 hours"
+      },
+      {
+        "id": "purchase-date",
+        "section": "Purchase history",
+        "prompt": "When was the device purchased?",
+        "hint": "e.g. 6 months ago, 18/02/2022, cannot be determined"
+      },
+      {
+        "id": "purchase-type",
+        "section": "Purchase history",
+        "prompt": "What was the purchase type?"
+      },
+      {
+        "id": "purchase-location",
+        "section": "Purchase history",
+        "prompt": "Where was the device purchased from?"
+      },
+      {
+        "id": "purchase-shop",
+        "section": "Purchase history",
+        "prompt": "What is the name of the retail shop or online platform?"
+      },
+      {
+        "id": "replacement-battery",
+        "section": "Replacement / add-on battery",
+        "prompt": "Have you purchased a replacement or add-on battery before?",
+        "hint": "If yes, ask for details"
+      },
+      {
+        "id": "safety-mark-plug",
+        "section": "Battery charger",
+        "prompt": "Does the battery charger plug have the Safety Mark logo?"
+      },
+      {
+        "id": "safety-mark-adapter",
+        "section": "Battery charger",
+        "prompt": "Does the power adapter of the battery charger have the Safety Mark logo?"
+      },
+      {
+        "id": "last-charge-date",
+        "section": "Battery charger",
+        "prompt": "When was the battery last charged?"
+      },
+      {
+        "id": "last-charge-time",
+        "section": "Battery charger",
+        "prompt": "What time was the battery last charged?",
+        "hint": "e.g. 2350hrs"
+      },
+      {
+        "id": "last-charge-duration",
+        "section": "Battery charger",
+        "prompt": "How long was the battery charged for?",
+        "hint": "e.g. 6 hours"
+      },
+      {
+        "id": "fire-location",
+        "section": "Events leading to fire",
+        "prompt": "Where did the fire occur?"
+      },
+      {
+        "id": "fire-spread",
+        "section": "Events leading to fire",
+        "prompt": "Did the fire spread beyond the device?"
+      },
+      {
+        "id": "device-status",
+        "section": "Events leading to fire",
+        "prompt": "What was the status of the device prior to the fire?"
+      },
+      {
+        "id": "other-information",
+        "section": "Events leading to fire",
+        "prompt": "Is there any other relevant information?"
+      }
+    ]
+  },
+  "vehicle_fire": {
+    "title": "Vehicle fire — Leading questions",
+    "export_name": "VEHICLE_FIRE_LEADING_QUESTIONS",
+    "title_export_name": "VEHICLE_FIRE_LEADING_QUESTIONS_TITLE",
+    "questions": [
+      {
+        "id": "vehicle-role",
+        "section": "Vehicle role",
+        "prompt": "Is this the main affected vehicle (first to catch fire, likely AOFO) or other damaged vehicle?",
+        "hint": "Other damaged vehicle = affected by fire from another vehicle or other source"
+      },
+      {
+        "id": "is-ev",
+        "section": "Vehicle role",
+        "prompt": "Is the affected vehicle an electric vehicle?",
+        "hint": "Includes EV cars and EV utility vehicles (refuse trucks, maintenance vehicles)"
+      },
+      {
+        "id": "purpose",
+        "section": "Vehicle information",
+        "prompt": "What is the purpose of the vehicle?",
+        "hint": "e.g. Personal, Personal (Rental/Leased), Private Hire, Taxi, Company Vehicle, Personal + Commercial"
+      },
+      {
+        "id": "plate-visible",
+        "section": "Vehicle information",
+        "prompt": "Is the vehicle registration plate still visible on the affected vehicle?"
+      },
+      {
+        "id": "plate-number",
+        "section": "Vehicle information",
+        "prompt": "What is the vehicle registration plate number?"
+      },
+      {
+        "id": "ownership-status",
+        "section": "Vehicle information",
+        "prompt": "What is the vehicle ownership status?",
+        "hint": "1st owner, 2nd owner onwards, or rented/leased"
+      },
+      {
+        "id": "vehicle-type",
+        "section": "Vehicle information",
+        "prompt": "What type of vehicle is it?"
+      },
+      {
+        "id": "vehicle-model",
+        "section": "Vehicle information",
+        "prompt": "What is the model of the vehicle?",
+        "hint": "e.g. Camry, Panigale V4, Carrera"
+      },
+      {
+        "id": "vehicle-model-extra",
+        "section": "Vehicle information",
+        "prompt": "Any additional vehicle model information?",
+        "hint": "e.g. Hyundai Ioniq 5 Electric → Exclusive 58 kWh; Honda Fit → 1.3, 1.5"
+      },
+      {
+        "id": "vehicle-colour",
+        "section": "Vehicle information",
+        "prompt": "What is the colour of the vehicle?"
+      },
+      {
+        "id": "vehicle-age",
+        "section": "Vehicle information",
+        "prompt": "What is the age of the vehicle (in years)?",
+        "hint": "If unknown, indicate \"NA\""
+      },
+      {
+        "id": "fuel-type",
+        "section": "Vehicle information",
+        "prompt": "What type of fuel does the vehicle use?"
+      },
+      {
+        "id": "state-at-fire",
+        "section": "Vehicle information",
+        "prompt": "What was the state of the vehicle at the time of fire?",
+        "hint": "Stationary (engine off or on) or in motion"
+      },
+      {
+        "id": "mileage",
+        "section": "Vehicle information",
+        "prompt": "What is the mileage (odometer reading in km)?",
+        "hint": "If unable to recall or heavily damaged, indicate \"0\""
+      },
+      {
+        "id": "origin-locations",
+        "section": "Driver observations",
+        "prompt": "What was the point of origin and which locations were visited?"
+      },
+      {
+        "id": "distance-travelled",
+        "section": "Driver observations",
+        "prompt": "What distance was travelled?"
+      },
+      {
+        "id": "duration-travel",
+        "section": "Driver observations",
+        "prompt": "What was the duration of travel?"
+      },
+      {
+        "id": "idle-duration",
+        "section": "Driver observations",
+        "prompt": "If the vehicle was idle or stationary, how long was it parked?"
+      },
+      {
+        "id": "usage-frequency",
+        "section": "Driver observations",
+        "prompt": "What is the frequency of usage of the vehicle?"
+      },
+      {
+        "id": "abnormalities",
+        "section": "Driver observations",
+        "prompt": "Were there any abnormalities before the fire?",
+        "hint": "Dashboard indicators, warning signs, flickering lights, electrical issues, etc."
+      },
+      {
+        "id": "modifications",
+        "section": "Modifications",
+        "prompt": "Were there any modifications or additions to the vehicle?"
+      },
+      {
+        "id": "insurance-available",
+        "section": "Insurance & servicing",
+        "prompt": "Is vehicle insurance information available at the time of incident?"
+      },
+      {
+        "id": "servicing-available",
+        "section": "Insurance & servicing",
+        "prompt": "Is vehicle servicing information available at the time of incident?",
+        "hint": "If not, follow up with affected parties at earliest availability"
+      },
+      {
+        "id": "vehicle-destination",
+        "section": "Follow-up",
+        "prompt": "Where will the vehicle be sent to now?"
+      },
+      {
+        "id": "other-information",
+        "section": "Follow-up",
+        "prompt": "Is there any other relevant information?"
+      }
+    ]
+  },
+  "lpg": {
+    "title": "LPG / Town Gas — Leading questions",
+    "export_name": "LPG_FIRE_LEADING_QUESTIONS",
+    "title_export_name": "LPG_FIRE_LEADING_QUESTIONS_TITLE",
+    "questions": [
+      {
+        "id": "stove-fuel",
+        "section": "Stove & fuel",
+        "prompt": "What is the stove fueled by?",
+        "hint": "e.g. LPG, Town Gas"
+      },
+      {
+        "id": "last-used",
+        "section": "Stove usage",
+        "prompt": "When was the stove last used before the fire?",
+        "hint": "e.g. 25/12/2022 at 1230H"
+      },
+      {
+        "id": "lighting-method",
+        "section": "Stove usage",
+        "prompt": "What was used to light up the stove?"
+      },
+      {
+        "id": "elbow-joint",
+        "section": "Stove usage",
+        "prompt": "Was there an elbow joint at the stove?"
+      },
+      {
+        "id": "ventilation",
+        "section": "Stove usage",
+        "prompt": "Was the stove area well-ventilated?"
+      },
+      {
+        "id": "multiple-attempts",
+        "section": "Stove usage",
+        "prompt": "Were there multiple attempts to light up the stove?",
+        "hint": "e.g. 2 or more in total"
+      },
+      {
+        "id": "abnormalities",
+        "section": "Before the fire",
+        "prompt": "Were there any abnormalities of the gas and stove system observed before the fire?",
+        "hint": "e.g. hissing sounds, gas smell, larger fire size than normal"
+      },
+      {
+        "id": "tampering",
+        "section": "Before the fire",
+        "prompt": "Were the gas and/or stove system(s) tampered with before the arrival of SCDF?",
+        "hint": "e.g. gas system was disassembled or modified"
+      },
+      {
+        "id": "faulty-equipment",
+        "section": "Findings",
+        "prompt": "Any faulty equipment?",
+        "hint": "e.g. stove, regulator, hose"
+      },
+      {
+        "id": "other-information",
+        "section": "Findings",
+        "prompt": "Is there any other relevant information?"
+      }
+    ]
+  }
+}
