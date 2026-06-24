@@ -44,6 +44,8 @@ FAKE_LANGUAGE_PREFIX = {
 }
 
 TARGET_LANGS = ("ms", "ta", "zh")
+DEFAULT_BATCH_SIZE = 8
+MAX_RETRIES = 3
 
 QUESTIONS_SYSTEM_PROMPT = """
 You translate fire investigation interview leading questions for Singapore Civil Defence Force officers.
@@ -64,6 +66,7 @@ Rules:
 - Preserve acronyms like PMD, PAB, PMA, OEM, SCDF where appropriate.
 - Include one entry per input question (same id).
 - hint_conduct and section_conduct may be null when input had no hint/section.
+- Return a single JSON object only. No markdown fences or commentary.
 """.strip()
 
 
@@ -76,8 +79,61 @@ def _extract_json_text(content: str) -> str:
     )
     if fence_match:
         return fence_match.group(1).strip()
+
     start = text.find("{")
-    return text[start:] if start != -1 else text
+    if start == -1:
+        return text
+
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        char = text[i]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+
+    return text[start:]
+
+
+def _parse_json_object(content: str) -> dict:
+    candidates: list[str] = []
+    stripped = content.strip()
+    if stripped:
+        candidates.append(stripped)
+    extracted = _extract_json_text(content)
+    if extracted and extracted not in candidates:
+        candidates.append(extracted)
+
+    last_error: json.JSONDecodeError | ValueError | None = None
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            last_error = exc
+            continue
+        if not isinstance(parsed, dict):
+            last_error = ValueError("expected JSON object")
+            continue
+        return parsed
+
+    snippet = content[:500].replace("\n", "\\n")
+    if last_error is not None:
+        raise ValueError(f"Invalid JSON from LLM ({last_error}); snippet: {snippet}") from last_error
+    raise ValueError(f"No JSON object found in LLM response; snippet: {snippet}")
 
 
 def ts_string(value: str) -> str:
@@ -93,7 +149,37 @@ def _fake_conduct_text(text: str, target_lang: str) -> str:
     return f"{prefix} {text}".strip()
 
 
-async def llm_translate_batch(
+def _chunk_questions(questions: list[dict], batch_size: int) -> list[list[dict]]:
+    if batch_size <= 0:
+        return [questions]
+    return [questions[i : i + batch_size] for i in range(0, len(questions), batch_size)]
+
+
+def _parse_translation_batch(
+    content: str,
+    questions: list[dict],
+) -> dict[str, dict[str, str | None]]:
+    parsed = _parse_json_object(content)
+    by_id: dict[str, dict[str, str | None]] = {}
+    question_ids = {q["id"] for q in questions}
+    for item in parsed.get("questions", []):
+        if not isinstance(item, dict):
+            continue
+        qid = str(item.get("id", "")).strip()
+        prompt_conduct = str(item.get("prompt_conduct", "")).strip()
+        if not qid or qid not in question_ids or not prompt_conduct:
+            continue
+        hint_raw = item.get("hint_conduct")
+        section_raw = item.get("section_conduct")
+        by_id[qid] = {
+            "prompt": prompt_conduct,
+            "hint": str(hint_raw).strip() if hint_raw else None,
+            "section": str(section_raw).strip() if section_raw else None,
+        }
+    return by_id
+
+
+async def _llm_translate_batch_once(
     questions: list[dict],
     target_lang: str,
 ) -> dict[str, dict[str, str | None]]:
@@ -121,7 +207,7 @@ Questions:
             {"role": "user", "content": user_prompt},
         ],
         "temperature": 0,
-        "max_tokens": 8192,
+        "max_tokens": 4096,
         "format": "json",
     }
     headers = {
@@ -138,24 +224,40 @@ Questions:
         response.raise_for_status()
         content = response.json()["choices"][0]["message"]["content"]
 
-    parsed = json.loads(_extract_json_text(content))
-    by_id: dict[str, dict[str, str | None]] = {}
-    question_ids = {q["id"] for q in questions}
-    for item in parsed.get("questions", []):
-        if not isinstance(item, dict):
-            continue
-        qid = str(item.get("id", "")).strip()
-        prompt_conduct = str(item.get("prompt_conduct", "")).strip()
-        if not qid or qid not in question_ids or not prompt_conduct:
-            continue
-        hint_raw = item.get("hint_conduct")
-        section_raw = item.get("section_conduct")
-        by_id[qid] = {
-            "prompt": prompt_conduct,
-            "hint": str(hint_raw).strip() if hint_raw else None,
-            "section": str(section_raw).strip() if section_raw else None,
-        }
-    return by_id
+    return _parse_translation_batch(content, questions)
+
+
+async def llm_translate_batch(
+    questions: list[dict],
+    target_lang: str,
+    *,
+    batch_size: int,
+) -> dict[str, dict[str, str | None]]:
+    merged: dict[str, dict[str, str | None]] = {}
+    chunks = _chunk_questions(questions, batch_size)
+
+    for index, chunk in enumerate(chunks, start=1):
+        label = f"{target_lang} batch {index}/{len(chunks)} ({len(chunk)} questions)"
+        last_error: Exception | None = None
+
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                print(f"    {label} attempt {attempt}")
+                batch_result = await _llm_translate_batch_once(chunk, target_lang)
+                missing = [q["id"] for q in chunk if q["id"] not in batch_result]
+                if missing:
+                    raise ValueError(f"missing translations for: {', '.join(missing)}")
+                merged.update(batch_result)
+                break
+            except Exception as exc:
+                last_error = exc
+                if attempt < MAX_RETRIES:
+                    await asyncio.sleep(1.5 * attempt)
+                continue
+        else:
+            raise RuntimeError(f"Failed {label}") from last_error
+
+    return merged
 
 
 def fake_translate_batch(
@@ -181,10 +283,11 @@ async def translate_questions_for_lang(
     target_lang: str,
     *,
     use_fake: bool,
+    batch_size: int,
 ) -> dict[str, dict[str, str | None]]:
     if use_fake:
         return fake_translate_batch(questions, target_lang)
-    return await llm_translate_batch(questions, target_lang)
+    return await llm_translate_batch(questions, target_lang, batch_size=batch_size)
 
 
 def render_template_file(
@@ -258,6 +361,17 @@ async def main() -> None:
         help="Use [MS]/[TA]/[ZH] prefix fake translations instead of LLM",
     )
     parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=DEFAULT_BATCH_SIZE,
+        help=f"Questions per LLM request (default: {DEFAULT_BATCH_SIZE})",
+    )
+    parser.add_argument(
+        "--only",
+        choices=["amd", "vehicle_fire", "lpg"],
+        help="Translate a single template (useful after a partial run)",
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=DEFAULT_OUTPUT_DIR,
@@ -266,6 +380,9 @@ async def main() -> None:
     args = parser.parse_args()
 
     data = json.loads(INPUT_PATH.read_text(encoding="utf-8"))
+    if args.only:
+        data = {args.only: data[args.only]}
+
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     for key, template in data.items():
@@ -279,6 +396,7 @@ async def main() -> None:
                 questions,
                 lang,
                 use_fake=args.fake,
+                batch_size=args.batch_size,
             )
 
         content = render_template_file(
