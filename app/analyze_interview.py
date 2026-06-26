@@ -22,7 +22,8 @@ Return ONLY valid JSON with this shape:
     {
       "id": "question-id-from-input",
       "status": "answered",
-      "evidence": "brief quote or paraphrase from transcript",
+      "answer": "the answer to this question as stated in the transcript",
+      "evidence": "brief supporting quote from transcript",
       "confidence": 0.9
     }
   ],
@@ -41,6 +42,11 @@ For each question in the checklist, classify status as exactly one of:
 - partial: topic touched but incomplete
 - unanswered: no relevant content in transcript
 - unclear: response exists but vague, contradictory, or evasive
+
+The "answer" field MUST be the interviewee's response located in the transcript
+(a verbatim quote or close paraphrase of what was actually said). Do NOT invent,
+infer, or generate an answer. Use an empty string when the transcript does not
+address the question (status unanswered).
 
 Include one coverage entry per input question (same id). Confidence is 0.0 to 1.0.
 
@@ -144,16 +150,20 @@ def fake_analyze_interview(req: AnalyzeInterviewRequest) -> AnalyzeInterviewResp
 
     for index, question in enumerate(req.questions):
         status = _FAKE_STATUS_CYCLE[index % len(_FAKE_STATUS_CYCLE)]
+        answer = ""
         evidence = ""
         confidence = 0.5
 
         if status == "answered":
+            answer = f"Interviewee response to: {question.prompt[:60]}"
             evidence = f"Transcript mentions topic related to: {question.prompt[:60]}"
             confidence = 0.85
         elif status == "partial":
+            answer = "Partial response found in transcript"
             evidence = "Topic briefly mentioned without full detail"
             confidence = 0.6
         elif status == "unclear":
+            answer = "Vague or inconsistent response detected"
             evidence = "Vague or inconsistent response detected"
             confidence = 0.55
 
@@ -161,6 +171,7 @@ def fake_analyze_interview(req: AnalyzeInterviewRequest) -> AnalyzeInterviewResp
             QuestionCoverage(
                 id=question.id,
                 status=status,
+                answer=answer,
                 evidence=evidence,
                 confidence=confidence,
             )
@@ -261,6 +272,7 @@ Leading questions checklist:
         coverage_by_id[qid] = QuestionCoverage(
             id=qid,
             status=_normalize_status(str(item.get("status", "unanswered"))),
+            answer=str(item.get("answer", "")).strip(),
             evidence=str(item.get("evidence", "")).strip(),
             confidence=max(0.0, min(1.0, float(item.get("confidence", 0.0)))),
         )
@@ -268,7 +280,9 @@ Leading questions checklist:
     coverage = [
         coverage_by_id.get(
             q.id,
-            QuestionCoverage(id=q.id, status="unanswered", evidence="", confidence=0.0),
+            QuestionCoverage(
+                id=q.id, status="unanswered", answer="", evidence="", confidence=0.0
+            ),
         )
         for q in req.questions
     ]

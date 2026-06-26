@@ -26,24 +26,28 @@ LLM_ANALYSIS_RESPONSE = """
     {
       "id": "device-type",
       "status": "answered",
+      "answer": "PMD",
       "evidence": "The device is a PMD",
       "confidence": 0.95
     },
     {
       "id": "device-model",
       "status": "answered",
+      "answer": "Xiaomi M365",
       "evidence": "model Xiaomi M365",
       "confidence": 0.9
     },
     {
       "id": "battery-brand",
       "status": "answered",
+      "answer": "Samsung",
       "evidence": "battery brand is Samsung",
       "confidence": 0.85
     },
     {
       "id": "charging-location",
       "status": "partial",
+      "answer": "Living room",
       "evidence": "charging it in the living room",
       "confidence": 0.7
     }
@@ -75,6 +79,7 @@ def test_analyze_interview_returns_fake_coverage():
         item["status"] in {"answered", "partial", "unanswered", "unclear"}
         for item in data["coverage"]
     )
+    assert all("answer" in item for item in data["coverage"])
     assert isinstance(data["follow_ups"], list)
 
 
@@ -112,6 +117,7 @@ def test_analyze_interview_llm_parses_json():
     assert data["source"] == "ollama"
     assert data["coverage"][0]["status"] == "answered"
     assert data["coverage"][0]["id"] == "device-type"
+    assert data["coverage"][0]["answer"] == "PMD"
     assert len(data["follow_ups"]) == 1
     assert data["follow_ups"][0]["related_question_id"] == "charging-location"
     assert data["follow_ups"][0]["prompt_conduct"]
