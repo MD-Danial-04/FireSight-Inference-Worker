@@ -131,41 +131,11 @@ class AnalyzeInterviewResponse(BaseModel):
     source: Literal["fake", "ollama", "nim"] = "fake"
 
 
-SuggestedPhotoSection = Literal[
-    "incident",
-    "damages",
-    "area_of_origin",
-    "burn_patterns",
-    "evidentiary",
-]
-
 PhotoAnalysisSource = Literal["fake", "ollama", "nim"]
-
-
-class PhotoAnalysisConfidence(BaseModel):
-    caption: float = Field(..., ge=0.0, le=1.0)
-    suggested_section: float | None = Field(default=None, ge=0.0, le=1.0)
-
-
-class SectionCandidate(BaseModel):
-    score: float = Field(..., ge=0.0, le=1.0)
-    reason: str | None = None
-
-
-class SectionCandidates(BaseModel):
-    incident: SectionCandidate | None = None
-    damages: SectionCandidate | None = None
-    area_of_origin: SectionCandidate | None = None
-    burn_patterns: SectionCandidate | None = None
-    evidentiary: SectionCandidate | None = None
 
 
 class AnalyzePhotoResponse(BaseModel):
     caption: str
-    detected_elements: list[str] = Field(default_factory=list)
-    suggested_section: SuggestedPhotoSection | None = None
-    section_candidates: SectionCandidates | None = None
-    confidence: PhotoAnalysisConfidence
     source: PhotoAnalysisSource = "fake"
 
 

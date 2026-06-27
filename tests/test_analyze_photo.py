@@ -4,72 +4,22 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 
 from app.analyze_photo import (
-    SUGGESTED_SECTION_CONFIDENCE_THRESHOLD,
     _build_user_prompt,
-    _derive_suggested_section,
-    _normalize_section,
-    _parse_section_candidates,
-    _resolve_section,
     _split_field_notes_excerpt,
 )
 from app.config import settings
 from app.main import app
-from app.schemas import AnalyzePhotoContext, SectionCandidate, SectionCandidates
+from app.schemas import AnalyzePhotoContext
 
 client = TestClient(app)
 
 LLM_PHOTO_RESPONSE = """
 ```json
 {
-  "caption": "Charring on wooden door frame near the kitchen entrance.",
-  "detected_elements": ["door frame charring", "smoke staining"],
-  "section_candidates": {
-    "incident": { "score": 0.2, "reason": null },
-    "damages": { "score": 0.5, "reason": "door frame damage" },
-    "area_of_origin": { "score": 0.4, "reason": null },
-    "burn_patterns": { "score": 0.81, "reason": "door frame charring" },
-    "evidentiary": { "score": 0.3, "reason": null }
-  },
-  "confidence": { "caption": 0.88 }
+  "caption": "Charring on wooden door frame near the kitchen entrance."
 }
 ```
 """
-
-LLM_LOW_CONFIDENCE_SECTION = """
-{
-  "caption": "Exterior view of the affected shophouse.",
-  "detected_elements": ["building facade"],
-  "suggested_section": "incident",
-  "confidence": {
-    "caption": 0.8,
-    "suggested_section": 0.4
-  }
-}
-"""
-
-LLM_INVALID_SECTION = """
-{
-  "caption": "Vehicle compartment with fire damage.",
-  "detected_elements": ["vehicle", "fire damage"],
-  "suggested_section": "vehicle",
-  "confidence": {
-    "caption": 0.9,
-    "suggested_section": 0.9
-  }
-}
-"""
-
-
-def test_normalize_section_rejects_vehicle():
-    assert _normalize_section("vehicle") is None
-    assert _normalize_section("burn_patterns") == "burn_patterns"
-    assert _normalize_section(None) is None
-
-
-def test_resolve_section_applies_threshold():
-    assert _resolve_section("damages", SUGGESTED_SECTION_CONFIDENCE_THRESHOLD) == "damages"
-    assert _resolve_section("damages", SUGGESTED_SECTION_CONFIDENCE_THRESHOLD - 0.01) is None
-    assert _resolve_section(None, 0.9) is None
 
 
 def test_build_user_prompt_prioritizes_visual_description():
@@ -86,7 +36,7 @@ def test_build_user_prompt_prioritizes_visual_description():
     )
 
     assert "Describe ONLY what is visible" in prompt
-    assert "CLASSIFICATION HINTS" in prompt
+    assert "CONTEXT (background only" in prompt
     assert "7 Gull Ave" in prompt
     assert "Photos already logged" in prompt
     assert "BACKGROUND (do not copy into caption)" in prompt
@@ -119,36 +69,6 @@ def test_split_field_notes_excerpt_separates_prior_photos_block():
     assert prior.startswith("Photos already logged")
 
 
-def test_parse_section_candidates_and_derive_suggested_section():
-    parsed = {
-        "caption": "Soot on rubbish chute door.",
-        "section_candidates": {
-            "incident": {"score": 0.1, "reason": None},
-            "damages": {"score": 0.55, "reason": "charred door"},
-            "area_of_origin": {"score": 0.82, "reason": "rubbish chute opening"},
-            "burn_patterns": {"score": 0.78, "reason": "soot staining"},
-            "evidentiary": {"score": 0.2, "reason": None},
-        },
-    }
-    candidates = _parse_section_candidates(parsed)
-    assert candidates is not None
-    assert candidates.area_of_origin is not None
-    assert candidates.area_of_origin.score == 0.82
-
-    section, confidence = _derive_suggested_section(candidates)
-    assert section == "area_of_origin"
-    assert confidence == 0.82
-
-
-def test_derive_suggested_section_null_when_below_threshold():
-    candidates = SectionCandidates(
-        burn_patterns=SectionCandidate(score=0.5, reason="light soot"),
-    )
-    section, confidence = _derive_suggested_section(candidates)
-    assert section is None
-    assert confidence is None
-
-
 def test_analyze_photo_returns_fake_result():
     response = client.post(
         "/v1/analyze-photo",
@@ -157,10 +77,7 @@ def test_analyze_photo_returns_fake_result():
     assert response.status_code == 200
     data = response.json()
     assert data["source"] == "fake"
-    assert data["suggested_section"] == "burn_patterns"
-    assert data["section_candidates"]["burn_patterns"]["score"] == 0.85
     assert data["caption"]
-    assert isinstance(data["detected_elements"], list)
 
 
 def test_analyze_photo_rejects_empty_file():
@@ -195,56 +112,4 @@ def test_analyze_photo_llm_parses_json():
     assert response.status_code == 200
     data = response.json()
     assert data["source"] == "ollama"
-    assert data["suggested_section"] == "burn_patterns"
-    assert data["section_candidates"]["burn_patterns"]["score"] == 0.81
     assert "door frame" in data["caption"].lower()
-
-
-def test_analyze_photo_llm_nulls_low_confidence_section():
-    mock_response = MagicMock()
-    mock_response.json.return_value = {
-        "message": {"content": LLM_LOW_CONFIDENCE_SECTION},
-    }
-    mock_response.raise_for_status = MagicMock()
-
-    mock_client = AsyncMock()
-    mock_client.post = AsyncMock(return_value=mock_response)
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
-
-    with (
-        patch.object(settings, "use_fake_photo_analysis", False),
-        patch("app.analyze_photo.httpx.AsyncClient", return_value=mock_client),
-    ):
-        response = client.post(
-            "/v1/analyze-photo",
-            files={"file": ("scene.jpg", BytesIO(b"fake-image"), "image/jpeg")},
-        )
-
-    assert response.status_code == 200
-    assert response.json()["suggested_section"] is None
-
-
-def test_analyze_photo_llm_rejects_invalid_section_value():
-    mock_response = MagicMock()
-    mock_response.json.return_value = {
-        "message": {"content": LLM_INVALID_SECTION},
-    }
-    mock_response.raise_for_status = MagicMock()
-
-    mock_client = AsyncMock()
-    mock_client.post = AsyncMock(return_value=mock_response)
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
-
-    with (
-        patch.object(settings, "use_fake_photo_analysis", False),
-        patch("app.analyze_photo.httpx.AsyncClient", return_value=mock_client),
-    ):
-        response = client.post(
-            "/v1/analyze-photo",
-            files={"file": ("scene.jpg", BytesIO(b"fake-image"), "image/jpeg")},
-        )
-
-    assert response.status_code == 200
-    assert response.json()["suggested_section"] is None

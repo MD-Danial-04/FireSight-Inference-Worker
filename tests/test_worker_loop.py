@@ -7,7 +7,6 @@ from app.schemas import (
     AnalyzePhotoResponse,
     ExtractInterviewResponse,
     ExtractResponse,
-    PhotoAnalysisConfidence,
     QuestionCoverage,
     TranscribeResponse,
 )
@@ -389,9 +388,6 @@ def test_worker_loop_processes_analyze_photo_claim():
 
     fake_photo = AnalyzePhotoResponse(
         caption="Charring on ceiling lining.",
-        detected_elements=["ceiling charring"],
-        suggested_section="burn_patterns",
-        confidence=PhotoAnalysisConfidence(caption=0.85, suggested_section=0.78),
         source="fake",
     )
 
@@ -422,4 +418,5 @@ def test_worker_loop_processes_analyze_photo_claim():
     coordinator.download_image.assert_called_once()
     coordinator.complete_photo_analysis.assert_called_once()
     call_kwargs = coordinator.complete_photo_analysis.call_args.kwargs
-    assert call_kwargs["result"]["suggested_section"] == "burn_patterns"
+    assert call_kwargs["result"]["caption"] == "Charring on ceiling lining."
+    assert call_kwargs["result"]["source"] == "fake"
