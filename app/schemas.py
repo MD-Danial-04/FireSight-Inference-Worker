@@ -131,6 +131,18 @@ class AnalyzeInterviewResponse(BaseModel):
     source: Literal["fake", "ollama", "nim"] = "fake"
 
 
+class CleanTranscriptRequest(BaseModel):
+    transcript_original: str = Field(..., min_length=1)
+    transcript_english: str = Field(..., min_length=1)
+    interview_language: InterviewLanguage = "en"
+
+
+class CleanTranscriptResponse(BaseModel):
+    transcript_original: str
+    transcript_english: str
+    source: Literal["fake", "ollama", "nim"] = "fake"
+
+
 PhotoAnalysisSource = Literal["fake", "ollama", "nim"]
 
 

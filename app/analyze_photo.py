@@ -15,22 +15,19 @@ SYSTEM_PROMPT = """
 You analyze fire-scene investigation photographs for a Singapore Civil Defence Force (SCDF) fire report.
 Return ONLY valid JSON with this shape:
 {
-  "caption": "Photo showing ... (2-4 flowing sentences as described below)"
+  "caption": "Photo showing ... (1-2 short sentences as described below)"
 }
 
 CAPTION RULES (critical):
 - The caption MUST begin with the words "Photo showing ".
-- Write 2-4 flowing sentences (a single paragraph, NO labels or headings) that naturally weave in these four aspects:
-  1. Overall scene: the general state of the area captured (e.g. heavy charring to upper walls, intact floor level).
-  2. Specific evidence: distinct items or details visible (e.g. melted plastic casing on the toaster, distinct "V" pattern on the drywall).
-  3. Fire effects: the type and degree of damage using fire-investigation vocabulary (soot deposition, clean burn, calcination, char depth, smoke staining, melt damage, heat marks).
-  4. Investigative significance: why this photo matters (e.g. illustrates low-level burns indicating a potential point of origin near the electrical outlet).
+- Write 1-2 short sentences only. The first sentence names the object or area shown; the second (optional) briefly describes the visible burn pattern or fire effects (charring, soot, melt damage, char depth, smoke staining, heat marks).
+- Keep it brief and factual. Do NOT describe overall scene context or explain the investigative significance of the photo.
 - Describe ONLY observable visual facts in THIS photograph. Do NOT copy or paraphrase stop message text, incident summaries, location narratives, field notes, or prior photo descriptions into the caption.
 - Do NOT include identifier metadata (image number, file name, date, time, photographer name) in the caption.
 - Each photo caption must be distinct and specific to what is visible in this frame.
 
 GOOD caption example:
-"Photo showing the upper section of a kitchen wall with heavy charring and soot deposition concentrated near the ceiling line while the lower wall and floor remain comparatively intact. A distinct 'V' burn pattern is visible on the drywall above a wall-mounted electrical outlet, with melted plastic casing on an adjacent appliance. The clean burn and deep char depth at the apex of the pattern, contrasted with lighter smoke staining outward, indicate intense localized heat. This low-level, concentrated damage suggests a potential point of origin at the electrical outlet."
+"Photo showing a wall-mounted electrical outlet with a distinct 'V' burn pattern on the drywall above it. The clean burn and deep charring at the apex indicate intense localized heat at this point."
 
 BAD caption example (do not output text like this):
 "Investigation of a moderate fire incident at 7 Gull Avenue. The fire is believed to have originated in the rubbish chute..."
@@ -133,8 +130,9 @@ def _truncate_background(text: str, max_length: int = 120) -> str:
 def _build_user_prompt(context: AnalyzePhotoContext | None) -> str:
     lines = [
         "Describe ONLY what is visible in this photograph.",
-        'Write the caption as 2-4 flowing sentences beginning with "Photo showing ", weaving in the overall scene, specific evidence, fire effects, and investigative significance.',
+        'Write the caption as 1-2 short sentences beginning with "Photo showing ", naming the object or area then briefly describing the visible burn pattern or fire damage.',
         "Focus on observable fire effects: charring, soot deposition, smoke staining, melt damage, burn patterns, calcination, char depth, heat marks, and physical evidence visible in the frame.",
+        "Keep it brief: do not describe overall scene context or the investigative significance of the photo.",
         "Do not restate stop message, incident summary, or prior photo descriptions in the caption, and do not include identifier metadata (image number, file name, date, time, photographer).",
     ]
 
@@ -177,11 +175,8 @@ def fake_analyze_photo(_context: AnalyzePhotoContext | None = None) -> AnalyzePh
     return AnalyzePhotoResponse(
         caption=(
             "Photo showing the ceiling lining above the seating area with charring and "
-            "heavy smoke staining concentrated overhead while the lower walls remain "
-            "comparatively intact. Soot deposition and clean burn marks are visible across "
-            "the ceiling panels directly above the seats. The upward-rising heat damage and "
-            "char depth indicate intense fire effects near ceiling level, suggesting fire "
-            "spread along the overhead lining away from a lower point of origin."
+            "heavy smoke staining. The upward heat damage and char depth indicate intense "
+            "fire effects at ceiling level."
         ),
         source="fake",
     )

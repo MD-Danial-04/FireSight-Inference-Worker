@@ -4,6 +4,7 @@ from uuid import UUID
 
 from app.analyze_interview import analyze_interview_coverage
 from app.analyze_photo import analyze_photo_for_worker
+from app.clean_transcript import clean_transcript
 from app.coordinator_client import CoordinatorClient
 from app.config import settings
 from app.extract import extract_fields
@@ -11,6 +12,7 @@ from app.extract_interview import extract_interview_details
 from app.schemas import (
     AnalyzeInterviewRequest,
     AnalyzePhotoContext,
+    CleanTranscriptRequest,
     ExtractRequest,
     ExtractInterviewRequest,
     InterviewLanguage,
@@ -65,6 +67,30 @@ async def run_worker_loop(
                     await coordinator.complete_analysis(
                         job_id,
                         result=analysis_response.model_dump(mode="json"),
+                    )
+                elif phase == "clean_transcript":
+                    original = (claim.get("transcript_original") or "").strip()
+                    english = (
+                        claim.get("transcript_english")
+                        or claim.get("transcript")
+                        or ""
+                    ).strip()
+                    if not original and not english:
+                        raise RuntimeError("Clean transcript claim missing transcript")
+                    interview_language: InterviewLanguage = (
+                        claim.get("interview_language") or "en"
+                    )
+                    clean_response = await clean_transcript(
+                        CleanTranscriptRequest(
+                            transcript_original=original or english,
+                            transcript_english=english or original,
+                            interview_language=interview_language,
+                        )
+                    )
+                    await coordinator.complete_clean_transcript(
+                        job_id,
+                        transcript_original=clean_response.transcript_original,
+                        transcript_english=clean_response.transcript_english,
                     )
                 elif phase == "analyze_photo":
                     image_bytes, _filename = await coordinator.download_image(job_id)

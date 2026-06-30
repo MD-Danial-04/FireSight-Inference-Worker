@@ -89,6 +89,25 @@ class CoordinatorClient:
             )
             response.raise_for_status()
 
+    async def complete_clean_transcript(
+        self,
+        job_id: UUID,
+        *,
+        transcript_original: str,
+        transcript_english: str,
+    ) -> None:
+        payload = {
+            "transcript_original": transcript_original,
+            "transcript_english": transcript_english,
+        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{self._base}/v1/worker/jobs/{job_id}/complete-clean-transcript",
+                headers=self._headers,
+                json=payload,
+            )
+            response.raise_for_status()
+
     async def download_image(self, job_id: UUID) -> tuple[bytes, str]:
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.get(

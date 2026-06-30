@@ -5,6 +5,7 @@ from uuid import uuid4
 from app.schemas import (
     AnalyzeInterviewResponse,
     AnalyzePhotoResponse,
+    CleanTranscriptResponse,
     ExtractInterviewResponse,
     ExtractResponse,
     QuestionCoverage,
@@ -358,6 +359,72 @@ def test_worker_loop_processes_analyze_interview_claim():
     coordinator.complete_analysis.assert_called_once()
     call_kwargs = coordinator.complete_analysis.call_args.kwargs
     assert call_kwargs["result"]["coverage"][0]["id"] == "device-type"
+
+
+def test_worker_loop_processes_clean_transcript_claim():
+    job_id = uuid4()
+    stop_event = asyncio.Event()
+    coordinator = AsyncMock()
+    coordinator.claim = AsyncMock(
+        side_effect=[
+            {
+                "job_id": str(job_id),
+                "phase": "clean_transcript",
+                "message_type": "interview",
+                "interview_language": "en",
+                "transcript_original": (
+                    "Q: Where were you?\nA: I was in the kitchen."
+                ),
+                "transcript_english": (
+                    "Q: Where were you?\nA: I was in the kitchen."
+                ),
+            },
+            None,
+        ]
+    )
+    coordinator.download_audio = AsyncMock()
+    coordinator.complete_transcription = AsyncMock()
+    coordinator.complete_extraction = AsyncMock()
+    coordinator.complete_analysis = AsyncMock()
+    coordinator.complete_clean_transcript = AsyncMock()
+    coordinator.fail = AsyncMock()
+
+    fake_clean = CleanTranscriptResponse(
+        transcript_original="I was in the kitchen.",
+        transcript_english="I was in the kitchen.",
+        source="fake",
+    )
+
+    async def run_once():
+        with (
+            patch(
+                "app.worker_loop.clean_transcript",
+                AsyncMock(return_value=fake_clean),
+            ),
+            patch("app.worker_loop.settings") as mock_settings,
+        ):
+            mock_settings.worker_poll_interval_sec = 0.01
+            mock_settings.use_fake_transcription = True
+
+            task = asyncio.create_task(
+                run_worker_loop(coordinator, whisper_model=None, stop_event=stop_event)
+            )
+            await asyncio.sleep(0.05)
+            stop_event.set()
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    asyncio.run(run_once())
+
+    coordinator.download_audio.assert_not_called()
+    coordinator.complete_transcription.assert_not_called()
+    coordinator.complete_clean_transcript.assert_called_once()
+    call_kwargs = coordinator.complete_clean_transcript.call_args.kwargs
+    assert call_kwargs["transcript_original"] == "I was in the kitchen."
+    assert call_kwargs["transcript_english"] == "I was in the kitchen."
 
 
 def test_worker_loop_processes_analyze_photo_claim():
